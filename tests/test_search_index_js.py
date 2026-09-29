@@ -1,9 +1,9 @@
 """Regression tests for the web app's search-index / bucket code.
 
-Driven through Node — the production code in
-``src/simdref/templates/app.js`` is loaded into a vm sandbox, then
-exercised with a small fixture catalog. Skips silently when ``node`` is
-not on PATH so non-web environments stay green.
+Driven through Node — the production code in ``web/app.js`` is loaded
+into a vm sandbox, then exercised with a small fixture catalog. Skips
+silently when ``node`` is not on PATH so non-web environments stay
+green.
 """
 
 from __future__ import annotations
