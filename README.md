@@ -14,17 +14,14 @@ Serve `web/` next to a site-data export (`search-index-*.json`,
 - `web/` — the static site.
 - `tests/` — pytest suite: `test_web_e2e.py` (Playwright, real browser)
   and `test_search_index_js.py` (runs `app.js` in a Node `vm` sandbox).
-- `tests/fixtures/site-data/` — a tiny, committed site-data export used by
-  the tests, so they need no `simdref` install.
+- `tests/fixtures/site-data/` — a tiny, hand-written site-data fixture (2
+  intrinsics, 2 instructions) so the tests need no `simdref export` step.
 - `tools/profile_web.py` — cold-load / keystroke profiling harness.
 - `scripts/gen-screenshots.py` — regenerates the web screenshot for docs.
-- `bench/verify.py` — whole-index equivalence checker: fingerprints the live
-  `searchEntries`/token/prefix postings in a real browser and diffs one arm
-  against another. `bench/build_trunc_arm.py --site-data DIR --root OUT`
-  builds `control` (untouched export), `control2` (identical mirror, the
-  positive control) and `trunc` (same export, search-index rows halved) under
-  `OUT`; `bench/verify.py --root OUT control control2 trunc` then expects
-  `control2` identical and `trunc` mismatched.
+
+The whole-index equivalence checker used to migrate this site off the old
+templated export (`verify.py`, `build_trunc_arm.py`, `probe.js`) was one-off
+migration evidence, not repo tooling, and is kept outside this repo.
 
 ## Development setup
 
