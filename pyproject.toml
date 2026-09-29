@@ -1,0 +1,15 @@
+[project]
+name = "simdref-web"
+version = "0.0.0"
+description = "Static HTML/CSS/JS site for the simdref search UI"
+requires-python = ">=3.10"
+
+# Dev-only tooling for tests/test_web_e2e.py (Playwright) and
+# tests/test_search_index_js.py (pytest wrapper around a Node harness).
+# No runtime dependency, no `simdref` dependency: this repo ships static
+# files only and is served as-is.
+[dependency-groups]
+dev = ["pytest", "playwright"]
+
+[tool.ruff]
+line-length = 100

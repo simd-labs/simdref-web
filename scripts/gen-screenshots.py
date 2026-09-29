@@ -1,54 +1,41 @@
 #!/usr/bin/env python3
-"""Regenerate the TUI + web-app screenshots used in README.md.
+"""Regenerate the web-app screenshot used in README.md.
 
-Images live on the ``docs-assets`` branch so the ``main`` branch stays
-lightweight to clone. After running this script, commit the outputs on
-that branch:
+The TUI screenshot lives in the core ``simdref`` repo now (it needs
+``simdref.tui``, which this repo does not depend on). This script only
+covers the web half: serve this repo's static templates plus a
+``simdref export`` site-data bundle, then capture headless Firefox.
+
+    scripts/gen-screenshots.py --site-data /path/to/site-data
+
+Images live on the ``docs-assets`` branch so ``main`` stays lightweight to
+clone. After running this script, commit the output there:
 
     git switch docs-assets              # or: git checkout --orphan docs-assets
     mkdir -p img
-    cp /tmp/simdref-tui.svg img/tui.svg
     cp /tmp/simdref-web.png img/web.png
-    git add img/*
-    git commit -m "docs: refresh screenshots"
+    git add img/web.png
+    git commit -m "docs: refresh web screenshot"
     git push origin docs-assets
     git switch -                        # back to your working branch
 """
 
 from __future__ import annotations
 
-import asyncio
+import argparse
 import shutil
 import socket
 import subprocess
 import sys
 import tempfile
 import time
+import urllib.request
 from contextlib import closing, contextmanager
 from pathlib import Path
 
-
+REPO_ROOT = Path(__file__).resolve().parent.parent
+STATIC_FILES = ("index.html", "app.js", "style.css", "favicon.svg", "logo.svg")
 OUT_DIR = Path("/tmp")
-
-
-async def render_tui() -> Path:
-    """Dump a Textual SVG screenshot with the TUI pre-loaded on a query."""
-    from simdref.tui import SimdrefApp
-
-    app = SimdrefApp(initial_query="_mm_add_ps")
-    # Taller terminal so the intrinsic metadata panel + perf table fit.
-    async with app.run_test(size=(132, 48)) as pilot:
-        # Initial search + thread-backed detail render are async workers.
-        await pilot.pause()
-        await app.workers.wait_for_complete()
-        await pilot.pause(0.3)
-        # The VerticalScroll detail pane auto-scrolls to the last mount
-        # by default; reset to the top so the metadata panel is visible.
-        detail = app.query_one("#detail-scroll")
-        detail.scroll_home(animate=False)
-        await pilot.pause(0.1)
-        out = app.save_screenshot(filename="simdref-tui.svg", path=str(OUT_DIR))
-    return Path(out)
 
 
 def _free_port() -> int:
@@ -81,10 +68,9 @@ def _serve(directory: Path, port: int):
             proc.kill()
 
 
-def render_web() -> Path | None:
+def render_web(site_data: Path) -> Path | None:
     """Screenshot the web UI in headless Firefox.
 
-    Requires a freshly exported ``web/`` tree (use ``isa web`` first).
     Firefox's headless screenshot fires immediately after load, so the
     page may capture before the async catalog fetch completes. Accept
     that and rerun if the result looks blank.
@@ -95,16 +81,16 @@ def render_web() -> Path | None:
         return None
     with tempfile.TemporaryDirectory() as tmp_dir:
         web_dir = Path(tmp_dir) / "web"
-        from simdref.storage import load_catalog
-        from simdref.web import export_web
-
-        export_web(load_catalog(), web_dir)
+        web_dir.mkdir()
+        for name in STATIC_FILES:
+            shutil.copy(REPO_ROOT / "web" / name, web_dir / name)
+        for item in site_data.iterdir():
+            dest = web_dir / item.name
+            shutil.copytree(item, dest) if item.is_dir() else shutil.copy(item, dest)
         port = _free_port()
         out = OUT_DIR / "simdref-web.png"
         with _serve(web_dir, port):
             # Warm cache fetches — Firefox screenshots too eagerly.
-            import urllib.request
-
             for path in (
                 "/",
                 "/search-index-meta.json.gz",
@@ -132,14 +118,15 @@ def render_web() -> Path | None:
 
 
 def main() -> int:
-    tui_path = asyncio.run(render_tui())
-    print(f"TUI screenshot: {tui_path}")
-    web_path = render_web()
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--site-data", type=Path, required=True, help="a `simdref export` site-data bundle directory")
+    args = ap.parse_args()
+    web_path = render_web(args.site_data)
     if web_path:
         print(f"Web screenshot: {web_path}")
-    else:
-        print("Web screenshot skipped — see script header for how to capture manually.")
-    return 0
+        return 0
+    print("Web screenshot skipped — see script header for how to capture manually.")
+    return 1
 
 
 if __name__ == "__main__":
