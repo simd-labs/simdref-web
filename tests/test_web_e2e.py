@@ -12,6 +12,7 @@ suite stays green on minimal CI images.
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import socket
 import threading
@@ -29,11 +30,16 @@ REPO_ROOT = Path(__file__).parent.parent
 FIXTURE_SITE_DATA = REPO_ROOT / "tests" / "fixtures" / "site-data"
 STATIC_FILES = ("index.html", "app.js", "style.css", "favicon.svg", "logo.svg")
 
+# CI points this at a real `simdref export` output (see rebuild-site.yml) so a
+# core format change fails here instead of silently shipping a broken site.
+SITE_DATA = Path(os.environ["SIMDREF_WEB_SITE_DATA"]) if "SIMDREF_WEB_SITE_DATA" in os.environ else FIXTURE_SITE_DATA
+
 
 def _populate_site(out: Path) -> None:
-    """Copy the committed fixture site-data plus this repo's static template
-    files into ``out``, so tests need no simdref install and no export step."""
-    shutil.copytree(FIXTURE_SITE_DATA, out, dirs_exist_ok=True)
+    """Copy site-data (the committed fixture, or a real export under CI) plus
+    this repo's static template files into ``out``, so most local runs need
+    no simdref install and no export step."""
+    shutil.copytree(SITE_DATA, out, dirs_exist_ok=True)
     for name in STATIC_FILES:
         shutil.copy(REPO_ROOT / "web" / name, out / name)
 

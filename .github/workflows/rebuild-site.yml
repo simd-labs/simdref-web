@@ -40,6 +40,16 @@ jobs:
       - name: Assemble static files
         run: cp web/index.html web/app.js web/style.css web/favicon.svg web/logo.svg _site/
 
+      - name: Test against the real export
+        # The e2e suite normally runs against the committed fixture; here it
+        # runs against this run's real `simdref export` output, so a core
+        # format change fails the build instead of silently shipping a
+        # broken site.
+        run: |
+          pip install pytest playwright
+          playwright install --with-deps chromium
+          SIMDREF_WEB_SITE_DATA="$PWD/_site" python -m pytest tests/test_web_e2e.py -q
+
       - uses: actions/upload-pages-artifact@v4
         with:
           path: _site
