@@ -18,6 +18,13 @@ Serve `web/` next to a site-data export (`search-index-*.json`,
   the tests, so they need no `simdref` install.
 - `tools/profile_web.py` — cold-load / keystroke profiling harness.
 - `scripts/gen-screenshots.py` — regenerates the web screenshot for docs.
+- `bench/verify.py` — whole-index equivalence checker: fingerprints the live
+  `searchEntries`/token/prefix postings in a real browser and diffs one arm
+  against another. `bench/build_trunc_arm.py --site-data DIR --root OUT`
+  builds `control` (untouched export), `control2` (identical mirror, the
+  positive control) and `trunc` (same export, search-index rows halved) under
+  `OUT`; `bench/verify.py --root OUT control control2 trunc` then expects
+  `control2` identical and `trunc` mismatched.
 
 ## Development setup
 
