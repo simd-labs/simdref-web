@@ -128,8 +128,7 @@ function displayInstr(v) {
 }
 
 function tokens(v) {
-  return String(v || "").replaceAll("_", " ").replaceAll(",", " ").replaceAll("{", " ").replaceAll("}", " ")
-    .toLowerCase().match(/[a-z0-9]+/g) || [];
+  return String(v || "").toLowerCase().match(/[a-z0-9]+/g) || [];
 }
 
 function displayIsa(values) {
@@ -483,27 +482,41 @@ function buildSearchIndexes(entries) {
 /* Append ``entries`` to the existing token/prefix maps, treating their
  * absolute position in ``searchEntries`` as ``baseIndex + offset``. Used
  * by the Phase-2 batched intrinsic ingest to avoid the full-rebuild stall. */
+const fieldTokens = new Map();  // field string -> tokens; 150k unique strings across 530k fields
 function extendSearchIndexes(entries, baseIndex) {
   for (let k = 0; k < entries.length; k++) {
-    const entry = entries[k];
-    const idx = baseIndex + k;
-    entry.searchTokens = [...new Set(entry.fields.flatMap(f => tokens(f)))];
-    for (const t of entry.searchTokens) {
-      if (!searchTokenIndex.has(t)) searchTokenIndex.set(t, []);
-      searchTokenIndex.get(t).push(idx);
-      for (let sz = 1; sz <= Math.min(t.length, 6); sz++) {
-        const pfx = t.slice(0, sz);
-        if (!searchPrefixIndex.has(pfx)) searchPrefixIndex.set(pfx, []);
-        searchPrefixIndex.get(pfx).push(idx);
-      }
+    const seen = new Set();
+    for (const f of entries[k].fields) {
+      let tk = fieldTokens.get(f);
+      if (!tk) fieldTokens.set(f, tk = tokens(f));
+      for (const t of tk) seen.add(t);
+    }
+    for (const t of seen) {
+      let ids = searchTokenIndex.get(t);
+      if (!ids) searchTokenIndex.set(t, ids = []);
+      ids.push(baseIndex + k);
     }
   }
+  searchPrefixIndex.clear();
+}
+
+/* Ascending ids of entries with a token starting with ``p`` (1-6 chars), built on first use. */
+function prefixPostings(p) {
+  if (p.length > 6) return undefined;
+  let ids = searchPrefixIndex.get(p);
+  if (ids) return ids;
+  const mark = new Uint8Array(searchEntries.length);
+  for (const [t, list] of searchTokenIndex) if (t.startsWith(p)) for (const i of list) mark[i] = 1;
+  ids = [];
+  for (let i = 0; i < mark.length; i++) if (mark[i]) ids.push(i);
+  searchPrefixIndex.set(p, ids);
+  return ids;
 }
 
 function candidateIndexes(query) {
   const qt = tokens(query);
   if (!qt.length) return null;
-  const lists = qt.map(t => searchTokenIndex.get(t) || searchPrefixIndex.get(t) || []);
+  const lists = qt.map(t => searchTokenIndex.get(t) || prefixPostings(t) || []);
   if (lists.some(l => !l.length)) return [];
   lists.sort((a, b) => a.length - b.length);
   let cur = new Set(lists[0]);
@@ -549,6 +562,46 @@ async function fetchJson(path) {
   }
   const r = await fetch(`${base}.json`);
   return r.ok ? r.json() : null;
+}
+
+/* ── Columnar search index (inverse of simdref.export._columnar_*) ──── */
+function truncate80(t) { return t.length <= 80 ? t : t.slice(0, 79) + "…"; }
+
+function decodeInstructions(s) {
+  const c = s.cols, out = new Array(s.n);
+  for (let i = 0; i < s.n; i++) {
+    const [isa, display_isa, isa_families, isa_subs] = s.isa[c.isa[i]];
+    const [architecture, display_architecture] = s.arch[c.arch[i]];
+    const [lat, cpi] = s.perf[c.perf[i]];
+    const display_key = c.dkey[i], display_form = c.dform[i] || display_key, form = c.form[i] || display_form;
+    const display_mnemonic = c.dmn[i], mnemonic = c.mn[i] || display_mnemonic, full = c.sum[i];
+    out[i] = {
+      key: c.key[i] || architecture + ":" + form.toLowerCase(), mnemonic, form, architecture,
+      summary: s.summaries[i] ?? truncate80(full), isa, lat, cpi, display_architecture, display_key, display_form,
+      display_mnemonic, display_isa, isa_families, isa_subs,
+      search_fields: s.fields[i] || [display_mnemonic, display_key, display_form, full, display_isa],
+    };
+  }
+  return out;
+}
+
+function decodeIntrinsics(s) {
+  const c = s.cols, out = new Array(s.n);
+  for (let i = 0; i < s.n; i++) {
+    const [isa, display_isa, isa_families, isa_subs] = s.isa[c.isa[i]];
+    const [architecture, display_architecture] = s.arch[c.arch[i]];
+    const [lat, cpi] = s.perf[c.perf[i]];
+    const name = c.name[i], desc = s.desc[c.desc[i]];
+    const e = {
+      name, subtitle: s.summaries[i] ?? truncate80(desc), architecture, isa, lat, cpi, display_architecture, display_isa,
+      isa_families, isa_subs, search_fields: s.fields[i] || [name, desc, display_isa, s.ins[c.ins[i]]],
+    };
+    if (c.prim[i] >= 0) e.primary_instr = s.prim[c.prim[i]];
+    if (c.arm[i] >= 0) e.arm_arch = s.arm[c.arm[i]];
+    if (c.cat[i] >= 0) e.category = s.cat[c.cat[i]];
+    out[i] = e;
+  }
+  return out;
 }
 
 /* ── Lazy detail loading ──────────────────────────────────────────── */
@@ -846,7 +899,7 @@ function kvLink(label, href) {
 
 function renderInstructionDetail(item, detail) {
   const d = detail || {};
-  const linked = (item.linked_intrinsics || [])
+  const linked = (d.linked_intrinsics || [])
     .map(n => catalog.intrByName[n])
     .filter(Boolean).filter(r => isaVisible(r.isa));
 
@@ -1553,24 +1606,45 @@ window.addEventListener("hashchange", () => {
  *
  * Two-phase load:
  *   Phase 1  — meta + filter_spec + build_stamp + instructions. These
- *              are small (~1 MB gz total) and let us paint the UI with
- *              the instruction pool searchable immediately.
+ *              are small (~1 MB gz total) and paint the UI with the
+ *              instruction pool searchable immediately.
  *   Phase 2  — intrinsics (~1.7 MB gz). Fetched in parallel from boot,
  *              joined into the search index in idle-time batches so the
  *              page stays responsive while ~93 k entries hydrate.
  */
-const _intrinsicsFetch = fetchJson("search-index-intrinsics.json").catch((err) => {
+// Column-encoding version this build can decode. Bump alongside the matching
+// `decodeInstructions`/`decodeIntrinsics` rewrite when core changes the shape.
+const SUPPORTED_SCHEMA_VERSION = 1;
+
+function showLoadError(message) {
+  console.error("simdref:", message);
+  if (metaNode) metaNode.textContent = "catalog load failed";
+  if (resultsCount) resultsCount.textContent = "Failed to load search index";
+  if (detailEmpty) {
+    detailEmpty.textContent = message;
+    detailEmpty.style.display = "";
+  }
+  window.__loadError = true;
+}
+
+const _intrinsicsFetch = fetchJson("search-index-intrinsics.json").then(decodeIntrinsics).catch((err) => {
   console.error("simdref: failed to load intrinsic search shard", err);
   return null;
 });
 
 Promise.all([
   fetchJson("search-index-meta.json"),
-  fetchJson("search-index-instructions.json"),
+  fetchJson("search-index-instructions.json").then(decodeInstructions),
   fetchJson("filter_spec.json").catch(() => null),
   fetchJson("build_stamp.json").catch(() => null),
 ])
   .then(([meta, instructions, spec, stamp]) => {
+    if (stamp && stamp.schema_version !== SUPPORTED_SCHEMA_VERSION) {
+      showLoadError(
+        `Catalog export is schema v${stamp.schema_version}, this build reads v${SUPPORTED_SCHEMA_VERSION}. Rebuild the site data.`,
+      );
+      return;
+    }
     const data = meta || {};
     data.instructions = instructions || [];
     data.intrinsics = [];  // populated in Phase 2
@@ -1651,12 +1725,7 @@ Promise.all([
   .catch((err) => {
     // Fetch failure (CORS, 404, gzip misconfig) should not leave "Loading..." up forever.
     console.error("simdref: failed to load catalog", err);
-    if (metaNode) metaNode.textContent = "catalog load failed";
-    if (resultsCount) resultsCount.textContent = "Failed to load search index";
-    if (detailEmpty) {
-      detailEmpty.textContent = "Could not load the search index. Open the browser console for details.";
-      detailEmpty.style.display = "";
-    }
+    showLoadError("Could not load the search index. Open the browser console for details.");
   });
 
 /* Phase 2 — fold the intrinsic shard into searchEntries / search index in
