@@ -20,7 +20,7 @@ import {fileURLToPath} from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const APP_JS = fs.readFileSync(
-  path.resolve(here, "..", "..", "src/simdref/templates/app.js"),
+  path.resolve(here, "..", "..", "web/app.js"),
   "utf8",
 );
 
@@ -82,7 +82,6 @@ const windowStub = {
   innerHeight: 800,
   location: {hash: "", search: "", href: "http://localhost/"},
   history: {replaceState: noop, pushState: noop},
-  SIMDREF_UI: {},
   navigator: {clipboard: {writeText: () => Promise.resolve()}, userAgent: "node"},
 };
 

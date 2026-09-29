@@ -11,8 +11,9 @@ suite stays green on minimal CI images.
 
 from __future__ import annotations
 
+import json
+import shutil
 import socket
-import sys
 import threading
 from contextlib import contextmanager
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -25,6 +26,16 @@ from playwright.sync_api import Error as PlaywrightError, sync_playwright  # noq
 
 
 REPO_ROOT = Path(__file__).parent.parent
+FIXTURE_SITE_DATA = REPO_ROOT / "tests" / "fixtures" / "site-data"
+STATIC_FILES = ("index.html", "app.js", "style.css", "favicon.svg", "logo.svg")
+
+
+def _populate_site(out: Path) -> None:
+    """Copy the committed fixture site-data plus this repo's static template
+    files into ``out``, so tests need no simdref install and no export step."""
+    shutil.copytree(FIXTURE_SITE_DATA, out, dirs_exist_ok=True)
+    for name in STATIC_FILES:
+        shutil.copy(REPO_ROOT / "web" / name, out / name)
 
 
 def _free_port() -> int:
@@ -53,17 +64,9 @@ def _serve(directory: Path, port: int):
 
 @pytest.fixture(scope="module")
 def web_dir(tmp_path_factory) -> Path:
-    """Build the web/ artefacts fresh into a tmp dir."""
+    """Assemble the static site into a tmp dir: fixture site-data + templates."""
     out = tmp_path_factory.mktemp("web")
-    sys.path.insert(0, str(REPO_ROOT / "src"))
-    try:
-        from simdref.web import export_web
-
-        from conftest import load_any_catalog
-
-        export_web(load_any_catalog(), out)
-    finally:
-        sys.path.pop(0)
+    _populate_site(out)
     return out
 
 
@@ -200,3 +203,26 @@ def test_deep_link_to_intrinsic_resolves_after_phase2(browser, page_url):
         )
     finally:
         page.close()
+
+
+def test_schema_version_mismatch_shows_error(browser, tmp_path_factory):
+    """A ``build_stamp.json`` with the wrong ``schema_version`` must abort the
+    load and surface an error instead of silently misdecoding the columnar
+    search-index shards (core bumped the format once already)."""
+    out = tmp_path_factory.mktemp("web-bad-schema")
+    _populate_site(out)
+    stamp = json.loads((out / "build_stamp.json").read_text())
+    stamp["schema_version"] = 999
+    raw = json.dumps(stamp).encode()
+    (out / "build_stamp.json").write_bytes(raw)
+    (out / "build_stamp.json.gz").unlink()  # force the raw-JSON fetchJson fallback
+
+    port = _free_port()
+    with _serve(out, port):
+        page = browser.new_page()
+        try:
+            page.goto(f"http://127.0.0.1:{port}/")
+            page.wait_for_function("() => window.__loadError === true", timeout=15_000)
+            assert "schema" in page.locator("#detail-empty").text_content().lower()
+        finally:
+            page.close()
