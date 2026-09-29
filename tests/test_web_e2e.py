@@ -117,14 +117,18 @@ def _toggle_kind(page, kind: str, checked: bool) -> None:
 
 
 def _wait_intrinsics_loaded(page) -> None:
-    """Block until Phase-2 ingest has appended all intrinsics.
+    """Block until Phase-2 ingest has folded every intrinsic into the
+    search index and buckets, not just fetched the shard.
 
-    The bootstrap appends a ``.meta-loading`` badge inside ``#meta`` and
-    removes it when the pump completes. Once the badge is gone the
-    search index covers both pools.
+    ``intrinsicsReady`` is the promise ``_ingestIntrinsics`` returns; it
+    resolves only once every entry is pushed into searchEntries/buckets.
+    Wait on it directly rather than the transient ``.meta-loading`` badge:
+    for this suite's small fixture catalog (34 intrinsics, one batch)
+    Phase 2 can attach and remove the badge within a single tick, faster
+    than DOM polling reliably observes either state.
     """
-    page.wait_for_selector("#meta .meta-loading", state="attached", timeout=15_000)
-    page.wait_for_selector("#meta .meta-loading", state="detached", timeout=60_000)
+    page.wait_for_function("() => intrinsicsReady !== null", timeout=15_000)
+    page.evaluate("() => intrinsicsReady")
 
 
 def test_search_add_with_only_intrinsics_returns_intrinsics(browser, page_url):
