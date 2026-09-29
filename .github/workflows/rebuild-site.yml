@@ -1,0 +1,55 @@
+name: Rebuild site
+
+# Pulls the `data-latest` release from the core simdref repo (published by
+# its ci.yml `publish-data` job), exports the JSON site-data bundle, and
+# deploys it next to this repo's static web/ files on GitHub Pages.
+
+on:
+  schedule:
+    - cron: "0 6 * * 1" # weekly, 6h after core's Monday data-latest refresh
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install simdref
+        run: pip install simdref
+
+      - name: Pull data-latest
+        run: simdref update --from-release
+
+      - name: Export site data
+        run: simdref export --out-dir _site
+
+      - name: Assemble static files
+        run: cp web/index.html web/app.js web/style.css web/favicon.svg web/logo.svg _site/
+
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+
+      - name: Install dev dependencies
+        run: pip install pytest playwright
+
+      - name: Install Playwright's Chromium
+        run: python -m playwright install --with-deps chromium
+
+      - name: No simdref import (this repo ships static files only)
+        run: |
+          if grep -rE 'import simdref|from simdref' --include='*.py' --include='*.js' .; then
+            echo "::error::found a simdref import — this repo must not depend on the core package"
+            exit 1
+          fi
+
+      - name: node --check web/app.js
+        run: node --check web/app.js
+
+      - name: pytest
+        run: python -m pytest -q
