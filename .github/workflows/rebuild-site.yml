@@ -18,6 +18,12 @@ concurrency:
   group: pages
   cancel-in-progress: false
 
+env:
+  # Which core repo to pull the release from. Overridden by the `CORE_REPO`
+  # repository variable on a validation fork; production leaves it unset and
+  # gets the real simdref repo.
+  SIMDREF_CORE_REPO: ${{ vars.CORE_REPO || 'DiamonDinoia/simdref' }}
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -29,7 +35,15 @@ jobs:
           python-version: "3.12"
 
       - name: Install simdref
-        run: pip install simdref
+        # Installs the wheel from SIMDREF_CORE_REPO's latest versioned
+        # release (skips its `data-*` catalog releases, which carry no wheel).
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag=$(gh api "repos/${SIMDREF_CORE_REPO}/releases" --jq '[.[] | select(.tag_name | test("^v[0-9]")) | .tag_name][0]')
+          [ -n "$tag" ] || { echo "::error::no versioned release found on ${SIMDREF_CORE_REPO}"; exit 1; }
+          gh release download "$tag" --repo "$SIMDREF_CORE_REPO" --pattern '*.whl' --dir /tmp/simdref-wheel --clobber
+          pip install /tmp/simdref-wheel/*.whl
 
       - name: Pull data-latest
         run: simdref update --from-release
