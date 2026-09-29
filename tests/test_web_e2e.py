@@ -123,7 +123,7 @@ def _wait_intrinsics_loaded(page) -> None:
     ``intrinsicsReady`` is the promise ``_ingestIntrinsics`` returns; it
     resolves only once every entry is pushed into searchEntries/buckets.
     Wait on it directly rather than the transient ``.meta-loading`` badge:
-    for this suite's small fixture catalog (34 intrinsics, one batch)
+    for this suite's tiny fixture catalog (2 intrinsics, one batch)
     Phase 2 can attach and remove the badge within a single tick, faster
     than DOM polling reliably observes either state.
     """
@@ -219,7 +219,7 @@ def test_schema_version_mismatch_shows_error(browser, tmp_path_factory):
     stamp["schema_version"] = 999
     raw = json.dumps(stamp).encode()
     (out / "build_stamp.json").write_bytes(raw)
-    (out / "build_stamp.json.gz").unlink()  # force the raw-JSON fetchJson fallback
+    (out / "build_stamp.json.gz").unlink(missing_ok=True)  # force the raw-JSON fetchJson fallback
 
     port = _free_port()
     with _serve(out, port):
