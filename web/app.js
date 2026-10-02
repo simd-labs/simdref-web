@@ -1156,8 +1156,8 @@ function renderResults() {
   renderedCount = 0;
   virtualRange = { start: -1, end: -1 };
   resultsNode.scrollTop = 0;
-  syncResultsCount(query);
   renderVisibleResults(true);
+  syncResultsCount(query);
   prefetchIntrinsicChunks(resultPool.slice(0, 16));
 
   // Auto-select
