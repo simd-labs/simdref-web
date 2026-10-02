@@ -914,3 +914,17 @@ body.ann-resizing { cursor: col-resize; user-select: none; }
   #ann-input      { min-height: 220px; }
   #ann-output     { min-height: 220px; }
 }
+
+/* C3: detail head + tabs */
+.detail-head .copy-btn { opacity: 1; width: 28px; height: 28px; font-size: .9rem; margin-left: .3rem; }
+.detail-head .copy-btn.sig-btn { width: auto; padding: 0 .5rem; font-size: .72rem; }
+pre.sig { font-family: var(--font-mono); font-size: .85rem; border: 1px solid var(--border); border-radius: var(--radius);
+  padding: .5rem .7rem; margin: .5rem 0 0; white-space: pre-wrap; word-break: break-word; background: var(--bg-elevated); }
+.perf-line { margin-top: .5rem; font-size: .85rem; color: var(--text-secondary); cursor: pointer; font-family: var(--font-mono); }
+.perf-line:hover { color: var(--accent); }
+.detail-head .kv-links { margin-top: .4rem; }
+.detail-tabs { display: flex; gap: .2rem; border-bottom: 1px solid var(--border); margin: .6rem 0; }
+.detail-tabs button { background: none; border: none; border-bottom: 2px solid transparent; padding: .35rem .7rem;
+  font: inherit; font-size: .82rem; cursor: pointer; color: var(--text-secondary); }
+.detail-tabs button[aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); }
+.detail-hidden { display: none !important; }

@@ -728,8 +728,9 @@ function renderMeasurements(measurements) {
     const color = perfKindBorders[kind] || "var(--accent-green, #2ea043)";
     const groups = groupMeasurements(rows);
     let inner = "";
+    let gi = 0;
     for (const [family, frows] of groups) {
-      inner += `<details class="meas-group" open><summary>${esc(family)} (${frows.length})</summary>${renderTable(measHeaders, frows)}</details>`;
+      inner += `<details class="meas-group" ${gi++ === 0 && kind === splits[0][0] ? "open" : ""}><summary>${esc(family)} (${frows.length})</summary>${renderTable(measHeaders, frows)}</details>`;
     }
     html += `<section class="perf-panel" style="border-left:3px solid ${color};padding-left:0.6rem;margin-bottom:0.8rem">
       <h4 style="margin:0 0 0.3rem 0;color:${color};font-size:0.85rem">${esc(label)} (${rows.length})</h4>
@@ -785,6 +786,77 @@ const operandHeaders = [
   {key: "name", label: "Name", cls: "mono"},
 ];
 
+function _nums(v) { return String(v == null ? "" : v).match(/\d+(?:\.\d+)?/g)?.map(Number) || []; }
+function perfSummary(ms) {
+  if (!ms || !ms.length) return "";
+  const rows = ms.filter(r => (r.sourceKind || "measured") === "measured");
+  const use = rows.length ? rows : ms;
+  const lat = use.flatMap(r => _nums(r.latency)), cpi = use.flatMap(r => _nums(r.tpLoop)).sort((a, b) => a - b);
+  const uo = use.flatMap(r => _nums(r.uops)).sort((a, b) => a - b);
+  const med = x => x[Math.floor(x.length / 2)];
+  const p = [];
+  if (lat.length) { const lo = Math.min(...lat), hi = Math.max(...lat); p.push(`Latency ${lo === hi ? lo : lo + "-" + hi} cycles`); }
+  if (cpi.length) p.push(`CPI ${med(cpi)}`);
+  if (uo.length) p.push(`${med(uo)} uop${med(uo) === 1 ? "" : "s"}`);
+  return p.length ? `<div class="perf-line" title="Go to Performance" onclick="document.getElementById('perf-sec')?.scrollIntoView({behavior:'smooth'})">${esc(p.join(" · "))}</div>` : "";
+}
+function copyBtns(name, sig) {
+  return sig
+    ? `<button class="copy-btn sig-btn" data-copy="${esc(sig)}" title="Copy signature">Copy signature</button>`
+    : `<button class="copy-btn" data-copy="${esc(name)}" title="Copy name">&#x2398;</button>`;
+}
+
+const C3_TABS = [["1", "Perf"], ["2", "Semantics"], ["3", "Operands"], ["4", "Related"]];
+let c3Tab = "";
+try { c3Tab = localStorage.getItem("simdref-c3-tab") || ""; } catch (_) {}
+function _c3secKind(sec) {
+  const h = (sec.querySelector("h3")?.textContent || "").toLowerCase();
+  if (h.includes("performance")) return "Perf";
+  if (h.includes("operands")) return "Operands";
+  if (h.includes("instructions") || h.includes("intrinsic equivalents") || h.includes("related")) return "Related";
+  return "Semantics";
+}
+function _c3apply() {
+  const detail = document.getElementById("detail");
+  if (!detail) return;
+  const t = c3Tab || "Perf";
+  for (const sec of detail.querySelectorAll("section.section")) {
+    if (sec.closest(".detail-head")) continue;
+    sec.classList.toggle("detail-hidden", _c3secKind(sec) !== t);
+  }
+  for (const b of detail.querySelectorAll(".detail-tabs button")) {
+    b.setAttribute("aria-selected", b.textContent.replace(/^\d /, "") === t ? "true" : "false");
+  }
+}
+function _c3pick(label) {
+  c3Tab = label;
+  try { localStorage.setItem("simdref-c3-tab", label); } catch (_) {}
+  _c3apply();
+}
+function _c3bar() {
+  setTimeout(() => {
+    const detail = document.getElementById("detail");
+    if (!detail || detail.querySelector(".detail-empty") || detail.querySelector(".detail-tabs")) { _c3apply(); return; }
+    const bar = document.createElement("nav");
+    bar.className = "detail-tabs"; bar.setAttribute("role", "tablist");
+    for (const [k, label] of C3_TABS) {
+      const b = document.createElement("button");
+      b.setAttribute("role", "tab");
+      b.textContent = `${k} ${label}`;
+      b.onclick = () => _c3pick(label);
+      bar.append(b);
+    }
+    const head = detail.querySelector(".detail-head");
+    if (head) head.after(bar); else detail.prepend(bar);
+    _c3apply();
+  }, 0);
+}
+document.addEventListener("keydown", (e) => {
+  if (!document.getElementById("detail")?.contains(document.activeElement)) return;
+  const t = C3_TABS.find(([k]) => k === e.key);
+  if (t) { e.preventDefault(); _c3pick(t[1]); }
+});
+
 function renderIntrinsicDetail(item, detail) {
   const linkedRefs = detail ? (detail.instruction_refs || item.instruction_refs || []) : (item.instruction_refs || []);
   const linked = (linkedRefs.length
@@ -801,48 +873,38 @@ function renderIntrinsicDetail(item, detail) {
   return `
     <div class="detail-head">
       <span class="result-kind intrinsic">intrinsic</span>
-      <h2>${esc(item.name)} <button class="copy-btn" data-copy="${esc(item.name)}" title="Copy name">&#x2398;</button></h2>
-      <div class="detail-sub">${esc(detail ? detail.signature : item.signature)}</div>
+      <h2>${esc(item.name)} ${copyBtns(item.name, detail ? detail.signature : item.signature)}</h2>
+      <pre class="sig">${esc(detail ? detail.signature : item.signature)}</pre>
       <div class="chips">
         ${((item.display_isa_tokens || item.isa || [])).map(v => `<span class="chip">${esc(Array.isArray(v) ? displayIsa(v) : v)}</span>`).join("")}
         ${item.header ? `<span class="chip">${esc(item.header)}</span>` : ""}
+        ${detail && detail._linkedInstruction ? (linked[0] ? `<a class="chip xref" href="#${encodeURIComponent(linked[0].key)}" data-kind="instruction" data-key="${esc(linked[0].key)}">${esc(detail._linkedInstruction)}</a>` : `<span class="chip">${esc(detail._linkedInstruction)}</span>`) : ""}
       </div>
+      <div class="kv-links">
+        ${instrPdfRefs.map(ref => `<a class="kv-link" href="${esc(ref.url || "")}" target="_blank" rel="noreferrer">${esc(ref.label || ref.source_id || "PDF")}${ref.page_start ? ` p${esc(ref.page_start)}` : ""}</a>`).join("")}
+        ${instrMeta.url ? kvLink("uops.info", canonUrl(instrMeta.url)) : ""}
+        ${detail && detail.url ? kvLink("Source", detail.url) : ""}
+      </div>
+      ${perfSummary(detail && detail._measurements)}
     </div>
     <section class="section">
       <h3>Summary</h3>
       <div>${esc(detail ? detail.description : item.description)}</div>
-    </section>
-    <section class="section">
-      <h3>Metadata</h3>
       <div class="kv-compact">
-        ${kvChip("Arch", item.display_architecture || item.architecture)}
-        ${kvChip("ISA", item.display_isa || displayIsa(item.isa))}
-        ${item.header ? kvChip("Header", item.header) : ""}
-        ${item.category ? kvChip("Category", item.subcategory ? `${item.subcategory} / ${item.category}` : item.category) : ""}
-        ${instrMeta.category ? kvChip("Instr Cat", instrMeta.category) : ""}
-        ${instrMeta.cpl ? kvChip("CPL", instrMeta.cpl) : ""}
         ${meta.supported_architectures ? kvChip("Supported", meta.supported_architectures) : ""}
         ${meta.classification_path ? kvChip("Section", meta.classification_path) : ""}
-        ${detail && detail._linkedInstruction ? kvChip("Instruction", detail._linkedInstruction) : ""}
         ${meta.argument_preparation ? kvChip("Arg Prep", meta.argument_preparation) : ""}
         ${meta.result ? kvChip("Result", meta.result) : ""}
         ${detail && detail.notes && detail.notes.length ? kvChip("Notes", detail.notes.join("; ")) : ""}
       </div>
-      <div class="kv-links">
-        ${detail && detail.url ? kvLink("Source", detail.url) : ""}
-        ${meta.reference_url ? kvLink("Reference", meta.reference_url) : ""}
-        ${instrMeta.url ? kvLink("uops.info", canonUrl(instrMeta.url)) : ""}
-        ${instrMeta["url-ref"] ? kvLink("Instr Ref", canonUrl(instrMeta["url-ref"])) : ""}
-        ${instrPdfRefs.map(ref => `<a class="kv-link" href="${esc(ref.url || "")}" target="_blank" rel="noreferrer">${esc(ref.label || ref.source_id || "PDF")}${ref.page_start ? ` p${esc(ref.page_start)}` : ""}</a>`).join("")}
-      </div>
     </section>
+    ${hasMeasurements ? `<section class="section" id="perf-sec">
+      <h3>Performance</h3>
+      ${renderMeasurements(detail._measurements)}
+    </section>` : ""}
     ${hasOperands ? `<section class="section">
       <h3>Operands</h3>
       ${renderTable(operandHeaders, detail._operands)}
-    </section>` : ""}
-    ${hasMeasurements ? `<section class="section">
-      <h3>Performance</h3>
-      ${renderMeasurements(detail._measurements)}
     </section>` : ""}
     <section class="section">
       <h3>Instructions</h3>
@@ -894,40 +956,29 @@ function renderInstructionDetail(item, detail) {
   return `
     <div class="detail-head">
       <span class="result-kind instruction">instruction</span>
-      <h2>${esc(item.display_key || item.key || item.mnemonic)} <button class="copy-btn" data-copy="${esc(item.display_key || item.key || item.mnemonic)}" title="Copy name">&#x2398;</button></h2>
-      <div class="detail-sub">${esc(d.display_form || item.display_form || d.form || item.form || item.display_mnemonic || item.mnemonic)}</div>
+      <h2>${esc(item.display_key || item.key || item.mnemonic)} ${copyBtns(item.display_key || item.key || item.mnemonic, d.display_form || item.display_form || d.form || item.form)}</h2>
+      <pre class="sig">${esc(d.display_form || item.display_form || d.form || item.form || item.display_mnemonic || item.mnemonic)}</pre>
       <div class="chips">
         ${((item.display_isa_tokens || item.isa || [])).map(v => `<span class="chip">${esc(Array.isArray(v) ? displayIsa(v) : v)}</span>`).join("")}
         ${meta.cpl ? `<span class="chip">CPL ${esc(meta.cpl)}</span>` : ""}
       </div>
+      <div class="kv-links">
+        ${pdfRefs.map(ref => `<a class="kv-link" href="${esc(ref.url || "")}" target="_blank" rel="noreferrer">${esc(ref.label || ref.source_id || "PDF")}${ref.page_start ? ` p${esc(ref.page_start)}` : ""}</a>`).join("")}
+        ${meta.url ? kvLink("uops.info", canonUrl(meta.url)) : ""}
+      </div>
+      ${perfSummary(measurements)}
     </div>
     <section class="section">
       <h3>Summary</h3>
       <div>${esc(d.summary || item.summary || "-")}</div>
     </section>
-    <section class="section">
-      <h3>Metadata</h3>
-      <div class="kv-compact">
-        ${kvChip("Mnemonic", item.display_mnemonic || item.mnemonic)}
-        ${kvChip("Form", d.display_form || item.display_form || d.form || item.form)}
-        ${kvChip("Arch", item.display_architecture || item.architecture)}
-        ${kvChip("ISA", item.display_isa || displayIsa(item.isa))}
-        ${meta.category ? kvChip("Category", meta.category) : ""}
-        ${meta.cpl ? kvChip("CPL", meta.cpl) : ""}
-      </div>
-      <div class="kv-links">
-        ${meta.url ? kvLink("uops.info", canonUrl(meta.url)) : ""}
-        ${meta["url-ref"] ? kvLink("Reference", canonUrl(meta["url-ref"])) : ""}
-        ${pdfRefs.map(ref => `<a class="kv-link" href="${esc(ref.url || "")}" target="_blank" rel="noreferrer">${esc(ref.label || ref.source_id || "PDF")}${ref.page_start ? ` p${esc(ref.page_start)}` : ""}</a>`).join("")}
-      </div>
-    </section>
+    ${measurements.length ? `<section class="section" id="perf-sec">
+      <h3>Performance</h3>
+      ${renderMeasurements(measurements)}
+    </section>` : ""}
     ${operands.length ? `<section class="section">
       <h3>Operands</h3>
       ${renderTable(operandHeaders, operands)}
-    </section>` : ""}
-    ${measurements.length ? `<section class="section">
-      <h3>Performance</h3>
-      ${renderMeasurements(measurements)}
     </section>` : ""}
     <section class="section">
       <h3>Intrinsics</h3>
@@ -987,13 +1038,13 @@ async function renderDetail(entry) {
       detail._operands = [];
       detail._pdfRefs = [];
     }
-    detailNode.innerHTML = renderIntrinsicDetail(entry.item, detail);
+    _c3bar(); detailNode.innerHTML = renderIntrinsicDetail(entry.item, detail);
   } else {
     // Load instruction detail chunk
     const prefix = chunkPrefix(entry.item.mnemonic);
     const chunk = await loadChunk(prefix);
     const detail = chunk[entry.item.key] || null;
-    detailNode.innerHTML = renderInstructionDetail(entry.item, detail);
+    _c3bar(); detailNode.innerHTML = renderInstructionDetail(entry.item, detail);
   }
 
 }
