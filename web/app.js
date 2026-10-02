@@ -299,7 +299,7 @@ function syncResultsCount(query) {
     const nA = catalog.instructions.length;
     resultsCount.textContent = shown < resultPool.length
       ? `Showing ${shown} of ${resultPool.length} (${nI} intrinsics · ${nA} instructions)`
-      : `Type to search ${nI} intrinsics · ${nA} instructions`;
+      : `${nI} intrinsics · ${nA} instructions`;
   } else {
     resultsCount.textContent = shown < resultPool.length
       ? `Showing ${shown} of ${resultPool.length} results`
@@ -1129,6 +1129,18 @@ function scheduleFilterRender() {
   });
 }
 
+const _EX = () => `<div class="detail-empty" id="detail-empty" style="padding:2rem">
+  <p>Try: <a href="#" data-q="_mm_add_ps">_mm_add_ps</a> · <a href="#" data-q="vaddq_f32">vaddq_f32</a> · <a href="#" data-q="gather">gather</a></p>
+  <p style="margin-top:.8rem">Keys: <kbd>/</kbd> search · <kbd>j</kbd> <kbd>k</kbd> move · <kbd>c</kbd> copy</p>
+  <p class="meta-line" style="margin-top:1.2rem;font-size:.78rem;color:var(--text-muted)">build ${esc(metaNode.dataset.stamp || "")} · <a href="https://github.com/simd-labs/simdref" target="_blank" rel="noreferrer">GitHub</a> · <a href="https://pypi.org/project/simdref/" target="_blank" rel="noreferrer">PyPI</a></p></div>`;
+detailNode.addEventListener("click", (e) => {
+  const q = e.target.closest("a[data-q]");
+  if (!q) return;
+  e.preventDefault();
+  queryInput.value = q.dataset.q;
+  scheduleRender();
+});
+
 function renderResults() {
   const query = queryInput.value.trim();
   if (!catalog) return;
@@ -1136,7 +1148,7 @@ function renderResults() {
   const visible = searchEntries.filter((_, i) => visibleSet.has(i));
 
   if (!query) {
-    resultPool = visible;
+    resultPool = [];
   } else {
     const cids = candidateIndexes(query);
     const pool = cids == null ? visible : cids.filter(i => visibleSet.has(i)).map(i => searchEntries[i]);
@@ -1167,9 +1179,7 @@ function renderResults() {
     || resultPool[0];
   if (selected) renderDetail(selected);
   else {
-    detailNode.innerHTML = "";
-    detailEmpty.style.display = "";
-    detailEmpty.textContent = query ? `No results for "${query}".` : "Select a result or search for an intrinsic / instruction.";
+    detailNode.innerHTML = query ? `<div class="detail-empty">No results for "${esc(query)}".</div>` : _EX();
   }
 }
 
