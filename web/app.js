@@ -12,9 +12,6 @@ const isaSummary     = $("isa-summary");
 const isaPanel       = $("isa-panel");
 const isaFamiliesNode = $("isa-families");
 const isaSubgroupsNode = $("isa-subgroups");
-const categoryPanel  = $("category-panel");
-const categoryChips  = $("category-chips");
-const categorySummary = $("category-summary");
 const themeToggle    = $("theme-toggle");
 const themeIconLight = $("theme-icon-light");
 const themeIconDark  = $("theme-icon-dark");
@@ -57,10 +54,6 @@ let availableIsas = [];
 let enabledIsas = new Set();
 let enableAllIsas = false;
 let enabledSubIsas = new Map();
-
-/* Category state — null means "all enabled" (no filter) */
-let availableCategories = [];   // [{family, category, subcategory, count}]
-let enabledCategories = null;
 
 /* Kind (intrinsic vs instruction/asm) filter — both enabled by default. */
 const enabledKinds = new Set(["intrinsic", "instruction"]);
@@ -169,13 +162,6 @@ function isaVisible(item) {
   return false;
 }
 
-function categoryVisible(item) {
-  if (enabledCategories === null) return true;
-  const cat = item.category || (item.metadata && item.metadata.category) || "";
-  if (!cat) return enabledCategories.has("");
-  return enabledCategories.has(cat);
-}
-
 function armArchVisible(item) {
   if (!enabledArmArch) return true;
   // Only intrinsics carry arm_arch classification; instructions are not filtered.
@@ -189,13 +175,11 @@ function armArchVisible(item) {
  * entries. Buckets:
  *   byKind:     "intrinsic" | "instruction"       -> entry indexes
  *   byFamily:   family name                        -> entry indexes
- *   byCategory: category name (or "")              -> entry indexes
  *   byArmArch:  "A32" | "A64" | "BOTH" | "__none"  -> entry indexes
  */
 let bucketsBuilt = false;
 const byKind = new Map();
 const byFamily = new Map();
-const byCategory = new Map();
 const byArmArch = new Map();
 
 function _pushBucket(map, key, i) {
@@ -205,12 +189,12 @@ function _pushBucket(map, key, i) {
 }
 
 function buildBuckets() {
-  byKind.clear(); byFamily.clear(); byCategory.clear(); byArmArch.clear();
+  byKind.clear(); byFamily.clear(); byArmArch.clear();
   extendBuckets(searchEntries, 0);
   bucketsBuilt = true;
 }
 
-/* Append ``entries`` to the kind/family/category/arm-arch buckets at
+/* Append ``entries`` to the kind/family/arm-arch buckets at
  * absolute positions ``baseIndex + offset``. Used by Phase-2 intrinsic
  * ingest so newly-arrived entries are reachable via the kind filter
  * without rebuilding from scratch. */
@@ -222,8 +206,6 @@ function extendBuckets(entries, baseIndex) {
     const fams = e.item.isa_families || [];
     if (fams.length === 0) _pushBucket(byFamily, "__none", i);
     for (const f of fams) _pushBucket(byFamily, f, i);
-    const cat = e.item.category || "";
-    _pushBucket(byCategory, cat, i);
     const arch = e.item.arm_arch || "__none";
     _pushBucket(byArmArch, arch, i);
   }
@@ -256,11 +238,6 @@ function rebuildVisibleSet() {
     if (needsSubCheck) {
       cand = _filterSet(cand, (i) => isaVisible(searchEntries[i].item));
     }
-  }
-
-  if (enabledCategories !== null) {
-    const catCand = _unionKeys(byCategory, [...enabledCategories]);
-    cand = _intersect(cand, catCand);
   }
 
   if (enabledArmArch) {
@@ -1021,59 +998,6 @@ async function renderDetail(entry) {
 
 }
 
-/* ── Category Filters ─────────────────────────────────────────────── */
-
-function updateCategorySummary() {
-  if (!categorySummary) return;
-  if (enabledCategories === null) {
-    categorySummary.textContent = "Category: All";
-    return;
-  }
-  const n = enabledCategories.size;
-  if (n === 0) { categorySummary.textContent = "Category: None"; return; }
-  if (n <= 2) {
-    categorySummary.textContent = "Category: " + [...enabledCategories].map(c => c || "(none)").join(", ");
-    return;
-  }
-  categorySummary.textContent = `Category: ${n} selected`;
-}
-
-function renderCategoryFilters() {
-  if (!categoryChips) return;
-  // De-duplicate categories across families (same name, aggregate count).
-  const bucket = new Map();
-  for (const spec of availableCategories) {
-    const cat = spec.category || "";
-    const prev = bucket.get(cat) || { category: cat, count: 0, families: new Set() };
-    prev.count += spec.count || 0;
-    if (spec.family) prev.families.add(spec.family);
-    bucket.set(cat, prev);
-  }
-  const entries = [...bucket.values()].sort((a, b) => b.count - a.count);
-  categoryChips.innerHTML = entries.map(entry => {
-    const active = enabledCategories === null || enabledCategories.has(entry.category);
-    const label = entry.category || "(uncategorised)";
-    return `<label class="isa-chip ${active ? "active" : ""}" title="${esc([...entry.families].join(", "))}">
-      <input type="checkbox" data-category="${esc(entry.category)}" ${active ? "checked" : ""}>
-      ${esc(label)}
-      <span class="chip-count">${entry.count}</span>
-    </label>`;
-  }).join("");
-
-  for (const cb of categoryChips.querySelectorAll("input[data-category]")) {
-    cb.addEventListener("change", () => {
-      const cat = cb.dataset.category;
-      if (enabledCategories === null) {
-        // First interaction: switch from "all" to an explicit set.
-        enabledCategories = new Set(entries.map(e => e.category));
-      }
-      if (cb.checked) enabledCategories.add(cat); else enabledCategories.delete(cat);
-      visibleSet = null;
-      scheduleFilterRender();
-    });
-  }
-}
-
 /* ── ISA Filters ──────────────────────────────────────────────────── */
 
 function updateIsaSummary() {
@@ -1200,9 +1124,7 @@ function scheduleFilterRender() {
     filterRenderScheduled = false;
     rebuildVisibleSet();
     if (typeof updateIsaSummary === "function") updateIsaSummary();
-    if (typeof updateCategorySummary === "function") updateCategorySummary();
     renderIsaFilters();
-    if (typeof renderCategoryFilters === "function") renderCategoryFilters();
     renderResults();
   });
 }
@@ -1374,7 +1296,6 @@ document.addEventListener("keydown", (e) => {
 
   // f: toggle ISA filter
   if (e.key === "f") { isaPanel.classList.toggle("hidden"); return; }
-  if (e.key === "g") { categoryPanel.classList.toggle("hidden"); return; }
 
   if (e.shiftKey && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
     e.preventDefault();
@@ -1518,24 +1439,6 @@ for (const cb of document.querySelectorAll('#kind-bar input[data-kind]')) {
   });
 }
 
-/* ── Category panel toggle + presets ──────────────────────────────── */
-if ($("category-toggle")) {
-  $("category-toggle").addEventListener("click", () => categoryPanel.classList.toggle("hidden"));
-}
-if ($("category-all")) {
-  $("category-all").addEventListener("click", () => {
-    enabledCategories = null;
-    visibleSet = null;
-    scheduleFilterRender();
-  });
-}
-if ($("category-none")) {
-  $("category-none").addEventListener("click", () => {
-    enabledCategories = new Set();
-    visibleSet = null;
-    scheduleFilterRender();
-  });
-}
 $("close-shortcuts").addEventListener("click", () => shortcutsOverlay.classList.add("hidden"));
 themeToggle.addEventListener("click", toggleTheme);
 queryInput.addEventListener("input", scheduleRender);
@@ -1655,7 +1558,6 @@ Promise.all([
     FAMILY_SUB_ORDER = config.family_sub_order || {};
     DEFAULT_SUBS = Object.fromEntries(Object.entries(config.default_subs || {}).map(([family, values]) => [family, new Set(values)]));
     isaFamilyOrder = config.family_order || {};
-    availableCategories = Array.isArray(config.categories) ? config.categories : [];
     ARCH_PRESETS = config.presets && typeof config.presets === "object" ? config.presets : {};
     if (stamp && metaNode) {
       const stale = stamp.catalog_generated_at && data.generated_at && stamp.catalog_generated_at !== data.generated_at;
@@ -1688,8 +1590,6 @@ Promise.all([
     initEnabledSubIsas();
 
     renderIsaFilters();
-    renderCategoryFilters();
-    updateCategorySummary();
 
     // Preset selection precedence:
     //   1. ?preset=NAME URL param (always wins — shareable link)

@@ -765,7 +765,6 @@ a:hover { text-decoration: underline; }
 body[data-tab="annotate"] .search-bar,
 body[data-tab="annotate"] #isa-panel,
 body[data-tab="annotate"] #kind-bar,
-body[data-tab="annotate"] #category-panel,
 body[data-tab="annotate"] .layout { display: none !important; }
 body:not([data-tab="annotate"]) #annotate-view { display: none; }
 

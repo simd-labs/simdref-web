@@ -13,8 +13,6 @@ from pathlib import Path
 INDEX_HTML = Path(__file__).parent.parent / "web" / "index.html"
 
 REQUIRED_IDS = (
-    "category-chips",
-    "category-toggle",
     "kind-bar",
     "isa-intel",
     "isa-arm32",
@@ -23,7 +21,14 @@ REQUIRED_IDS = (
 )
 
 
-def test_index_html_has_category_and_kind_panels():
+def test_index_html_has_kind_and_isa_panels():
     html = INDEX_HTML.read_text()
     for element_id in REQUIRED_IDS:
         assert f'id="{element_id}"' in html, f"missing #{element_id} in {INDEX_HTML}"
+
+def test_index_html_has_no_category_filter():
+    # A1: the Category filter can never match (no entry carries `category`),
+    # so the panel, toggle and summary are gone from the shipped HTML.
+    html = INDEX_HTML.read_text()
+    for element_id in ("category-toggle", "category-panel", "category-chips"):
+        assert f'id="{element_id}"' not in html, f"#{element_id} still in {INDEX_HTML}"
