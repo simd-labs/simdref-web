@@ -940,3 +940,18 @@ pre.sig { font-family: var(--font-mono); font-size: .85rem; border: 1px solid va
   .header-right .meta { display: none; }
   #detail table { display: block; overflow-x: auto; }
 }
+@media (max-width: 768px) {
+  /* F3: keep the page from scrolling sideways */
+  html, body { overflow-x: hidden; }
+  .layout, .results-panel, .detail-panel { min-width: 0; }
+  .header { flex-wrap: wrap; row-gap: .3rem; padding: .4rem .6rem; }
+  .header-left { min-width: 0; flex-wrap: wrap; }
+  .header-right { gap: .5rem; }
+  .search-bar { padding: .5rem .6rem; }
+  .isa-panel { max-width: 100%; overflow-x: auto; }
+  .detail-panel { padding: .6rem; }
+  pre.sig, pre.desc-code { max-width: 100%; }
+}
+@media (max-width: 480px) {
+  .header-right a.icon-btn { display: none; }
+}
