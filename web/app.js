@@ -1192,6 +1192,26 @@ detailNode.addEventListener("click", (e) => {
   scheduleRender();
 });
 
+/* E1: results-or-detail, one at a time (mobile) */
+(function () {
+  const mq = matchMedia("(max-width: 768px)");
+  function backBtn() {
+    if (document.getElementById("back-results")) return;
+    const b = document.createElement("button");
+    b.id = "back-results"; b.type = "button"; b.textContent = "\u2190 results";
+    b.addEventListener("click", (ev) => { ev.preventDefault(); ev.stopPropagation(); delete document.body.dataset.mobileView; });
+    document.getElementById("detail")?.prepend(b);
+  }
+  if (mq.matches) backBtn();
+  mq.addEventListener("change", () => { if (mq.matches) backBtn(); delete document.body.dataset.mobileView; });
+  document.addEventListener("click", (e) => {
+    if (!mq.matches) return;
+    if (!e.target.closest("#results .result")) return;
+    document.body.dataset.mobileView = "detail";
+    backBtn();
+  });
+})();
+
 function renderResults() {
   const query = queryInput.value.trim();
   if (!catalog) return;

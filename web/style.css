@@ -928,3 +928,15 @@ pre.sig { font-family: var(--font-mono); font-size: .85rem; border: 1px solid va
   font: inherit; font-size: .82rem; cursor: pointer; color: var(--text-secondary); }
 .detail-tabs button[aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); }
 .detail-hidden { display: none !important; }
+
+/* E1: results-or-detail, one at a time (mobile) */
+#back-results { display: none; }
+@media (max-width: 768px) {
+  .layout { display: block; }
+  body:not([data-mobile-view="detail"]) .detail-panel { display: none; }
+  body[data-mobile-view="detail"] .results-panel { display: none; }
+  body[data-mobile-view="detail"] #back-results { display: block; position: sticky; top: 0; z-index: 2; }
+  .kind-bar { display: none; }
+  .header-right .meta { display: none; }
+  #detail table { display: block; overflow-x: auto; }
+}
