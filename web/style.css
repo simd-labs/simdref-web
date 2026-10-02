@@ -361,11 +361,11 @@ body {
   /* Fixed height enables O(1) viewport virtualisation (see app.js).
      Must match ROW_HEIGHT_PX there. */
   box-sizing: border-box;
-  height: 56px;
+  height: 68px;
   overflow: hidden;
   contain: layout paint style;
   content-visibility: auto;
-  contain-intrinsic-size: 56px;
+  contain-intrinsic-size: 68px;
 }
 .result-summary {
   display: -webkit-box;

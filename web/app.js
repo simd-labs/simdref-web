@@ -37,7 +37,7 @@ const LOAD_MORE_THRESHOLD_PX = 600;
 /* Viewport virtualisation — keep only rows inside the visible window
  * (plus a small buffer) in the DOM. Row height must match .result in
  * style.css. */
-const ROW_HEIGHT_PX = 56;
+const ROW_HEIGHT_PX = 68;
 const VIEWPORT_BUFFER_ROWS = 30;
 let virtualWrap = null;
 let virtualRange = { start: -1, end: -1 };
