@@ -809,9 +809,10 @@ detailNode.addEventListener("click", (e) => {
   document.getElementById("perf-sec")?.scrollIntoView({ behavior: "smooth" });
 });
 function copyBtns(name, sig) {
+  const nameBtn = `<button class="copy-btn" data-copy="${esc(name)}" title="Copy name">Copy name</button>`;
   return sig
-    ? `<button class="copy-btn sig-btn" data-copy="${esc(sig)}" title="Copy signature">Copy signature</button>`
-    : `<button class="copy-btn" data-copy="${esc(name)}" title="Copy name">&#x2398;</button>`;
+    ? `${nameBtn} <button class="copy-btn sig-btn" data-copy="${esc(sig)}" title="Copy signature">Copy signature</button>`
+    : nameBtn;
 }
 
 const C3_TABS = [["1", "Perf"], ["2", "Semantics"], ["3", "Operands"], ["4", "Related"]];
@@ -839,7 +840,7 @@ function _c3apply() {
     const label = b.textContent.replace(/^\d /, "");
     const has = [...kinds.values()].includes(label);
     b.disabled = !has;
-    b.setAttribute("aria-selected", has && label === t ? "true" : "false");
+    b.setAttribute("aria-pressed", has && label === t ? "true" : "false");
   }
 }
 function _c3pick(label) {
@@ -852,10 +853,10 @@ function _c3bar() {
     const detail = document.getElementById("detail");
     if (!detail || detail.querySelector(".detail-empty") || detail.querySelector(".detail-tabs")) { _c3apply(); return; }
     const bar = document.createElement("nav");
-    bar.className = "detail-tabs"; bar.setAttribute("role", "tablist");
+    bar.className = "detail-tabs";
     for (const [k, label] of C3_TABS) {
       const b = document.createElement("button");
-      b.setAttribute("role", "tab");
+      b.type = "button";
       b.textContent = `${k} ${label}`;
       b.onclick = () => _c3pick(label);
       bar.append(b);
@@ -1047,6 +1048,10 @@ async function renderDetail(entry) {
   for (const n of resultsNode.querySelectorAll(".result")) {
     n.classList.toggle("active", n.dataset.key === entry.key);
   }
+  // Remember the hash this render writes so hashchange can tell it apart
+  // from an external hash (deep link, back/forward) and not switch the
+  // mobile view for our own write.
+  appWrittenHash = "#" + encodeURIComponent(entry.key);
   location.hash = encodeURIComponent(entry.key);
 
   if (entry.kind === "intrinsic") {
@@ -1253,10 +1258,10 @@ function renderResults() {
   const query = queryInput.value.trim();
   if (!catalog) return;
   if (visibleSet === null) rebuildVisibleSet();
+  const visible = searchEntries.filter((_, i) => visibleSet.has(i));
   if (!query) {
     resultPool = [];
   } else {
-    const visible = searchEntries.filter((_, i) => visibleSet.has(i));
     const cids = candidateIndexes(query);
     const pool = cids == null ? visible : cids.filter(i => visibleSet.has(i)).map(i => searchEntries[i]);
     resultPool = pool
@@ -1283,6 +1288,7 @@ function renderResults() {
   const fromHash = decodeURIComponent(location.hash.replace(/^#/, ""));
   const selected = resultPool.find(e => e.key === activeKey)
     || resultPool.find(e => e.key === fromHash)
+    || (!query && _hashEntry(fromHash))
     || resultPool[0];
   if (selected) renderDetail(selected);
   else {
@@ -1615,6 +1621,7 @@ queryInput.addEventListener("keydown", (e) => {
 
 /* ── Hash navigation ──────────────────────────────────────────────── */
 let intrinsicsReady = null;  // resolved by Phase-2 bootstrap
+let appWrittenHash = "";     // last hash renderDetail wrote itself
 
 function _hashEntry(key) {
   if (!catalog || !key) return null;
@@ -1624,8 +1631,14 @@ function _hashEntry(key) {
 }
 
 window.addEventListener("hashchange", () => {
+  // A hash renderDetail wrote on auto-selection/row click: not a user
+  // navigation; never switch the mobile view for it.
+  if (location.hash === appWrittenHash) { appWrittenHash = ""; return; }
   const key = decodeURIComponent(location.hash.replace(/^#/, ""));
-  if (!catalog || !key) return;
+  if (!catalog) return;
+  // An emptied hash (back to the plain URL) returns mobile to the list.
+  if (!key) { delete document.body.dataset.mobileView; return; }
+  if (_mq768.matches) document.body.dataset.mobileView = "detail";
   let entry = _hashEntry(key);
   if (entry) { renderDetail(entry); return; }
   // Hash may name an intrinsic that Phase 2 hasn't ingested yet.

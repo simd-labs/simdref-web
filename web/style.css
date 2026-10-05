@@ -927,7 +927,7 @@ button.perf-line { background: none; border: none; padding: 0; text-align: left;
 .detail-tabs { display: flex; gap: .2rem; border-bottom: 1px solid var(--border); margin: .6rem 0; }
 .detail-tabs button { background: none; border: none; border-bottom: 2px solid transparent; padding: .35rem .7rem;
   font: inherit; font-size: .82rem; cursor: pointer; color: var(--text-secondary); }
-.detail-tabs button[aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); }
+.detail-tabs button[aria-pressed="true"] { color: var(--text); border-bottom-color: var(--accent); }
 .detail-hidden { display: none !important; }
 
 /* E1: results-or-detail, one at a time (mobile) */

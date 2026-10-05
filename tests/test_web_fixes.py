@@ -9,9 +9,7 @@ number-key guards.
 
 from __future__ import annotations
 
-import threading
-from contextlib import contextmanager
-from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+import re
 from pathlib import Path
 
 import pytest
@@ -21,7 +19,7 @@ from playwright.sync_api import Error as PlaywrightError, sync_playwright  # noq
 
 import sys
 sys.path.insert(0, str(Path(__file__).parent))
-from test_web_e2e import FIXTURE_SITE_DATA, SITE_DATA, _free_port, _populate_site  # noqa: E402
+from test_web_e2e import FIXTURE_SITE_DATA, SITE_DATA, _free_port, _populate_site, _serve  # noqa: E402
 
 # The R2 pin tests assert on real catalog entries (NEG's missing perf, ADDPS's
 # linked intrinsics and doc links, measured + modeled perf rows) that the
@@ -31,25 +29,6 @@ from test_web_e2e import FIXTURE_SITE_DATA, SITE_DATA, _free_port, _populate_sit
 NEEDS_EXPORT = pytest.mark.skipif(
     SITE_DATA == FIXTURE_SITE_DATA,
     reason="needs a real simdref export (SIMDREF_WEB_SITE_DATA); the fixture is too small")
-
-
-class _Quiet(SimpleHTTPRequestHandler):
-    def log_message(self, *args, **kwargs):
-        pass
-
-
-@contextmanager
-def _serve(directory: Path, port: int):
-    handler = lambda *a, **k: _Quiet(*a, directory=str(directory), **k)
-    httpd = ThreadingHTTPServer(("127.0.0.1", port), handler)
-    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
-    thread.start()
-    try:
-        yield
-    finally:
-        httpd.shutdown()
-        httpd.server_close()
-        thread.join(timeout=2)
 
 
 @pytest.fixture(scope="module")
@@ -81,19 +60,25 @@ def site(tmp_path_factory):
 
 def test_f1_count_updates_after_rows_render(browser, site):
     """F1: right after a query the count must agree with the rendered rows,
-    never 'Showing 0 of N'."""
+    never 'Showing 0 of N'. Parses both count flavours."""  
     _, url = site
     page = browser.new_page(viewport={"width": 1280, "height": 800})
     try:
         page.goto(url)
         page.locator("#query").fill("_mm_add_ps")
         page.wait_for_function("document.querySelectorAll('#results .result').length > 0")
+        page.wait_for_timeout(200)
         rows = page.evaluate("document.querySelectorAll('#results .result').length")
         count = page.text_content("#results-count") or ""
         assert rows > 0
         assert " 0 of " not in f" {count} ", f"count ran before render: {count!r}"
-        first = count.split()[0]
-        assert first.isdigit() and int(first) > 0, count
+        m = re.search(r"^(\d+) results? for ", count)
+        if m:
+            assert int(m.group(1)) == rows, f"{count!r} vs {rows} rendered rows"
+        else:
+            m = re.search(r"^Showing (\d+) of (\d+) results", count)
+            assert m, f"unparsed count line: {count!r}"
+            assert 0 < int(m.group(1)) <= min(rows, int(m.group(2))), (count, rows)
     finally:
         page.close()
 
@@ -150,7 +135,11 @@ def test_f3_no_horizontal_overflow_at_390(browser, site):
         page.wait_for_function("document.querySelectorAll('#results .result').length > 0")
         assert_no_overflow("after search")
         page.evaluate("document.querySelector('#results .result').click()")
-        page.wait_for_function("() => document.querySelector('#detail .detail-head')", timeout=15_000)
+        page.wait_for_function(
+            "() => document.body.dataset.mobileView === 'detail'"
+            " && !!document.querySelector('#detail .detail-head')"
+            " && document.querySelector('#detail .detail-head').getBoundingClientRect().width > 0",
+            timeout=15_000)
         assert_no_overflow("detail open")
     finally:
         page.close()
@@ -197,7 +186,7 @@ def _tab(page, label):
     page.wait_for_function(
         f"""Array.from(document.querySelectorAll('#detail .detail-tabs button'))
             .find(b => /{label}/.test(b.textContent))
-            ?.getAttribute('aria-selected') === 'true'""",
+            ?.getAttribute('aria-pressed') === 'true'""",
         timeout=10_000)
 
 
@@ -246,11 +235,11 @@ def test_default_tab_falls_back_when_no_perf(browser, site):
         assert len(_visible_sections(page)) >= 1, "default view renders zero visible sections"
         sel = page.evaluate(
             "Array.from(document.querySelectorAll('#detail .detail-tabs button'))"
-            ".map(b => b.getAttribute('aria-selected')).join(',')")
+            ".map(b => b.getAttribute('aria-pressed')).join(',')")
         assert "true" in sel, sel
         perf_sel = page.evaluate(
             "Array.from(document.querySelectorAll('#detail .detail-tabs button'))"
-            ".find(b => /Perf/.test(b.textContent))?.getAttribute('aria-selected')")
+            ".find(b => /Perf/.test(b.textContent))?.getAttribute('aria-pressed')")
         assert perf_sel in ("false", None), perf_sel
     finally:
         page.close()
@@ -330,7 +319,7 @@ def test_perf_goto_switches_tab_then_scrolls(browser, site):
         page.evaluate("document.querySelector('#detail .perf-line')?.click()")
         page.wait_for_function(
             "Array.from(document.querySelectorAll('#detail .detail-tabs button'))"
-            ".find(b => /Perf/.test(b.textContent))?.getAttribute('aria-selected') === 'true'",
+            ".find(b => /Perf/.test(b.textContent))?.getAttribute('aria-pressed') === 'true'",
             timeout=10_000)
         assert page.evaluate(
             "document.getElementById('perf-sec')?.classList.contains('detail-hidden')") is False
@@ -353,7 +342,7 @@ def test_number_keys_ignore_modifiers_and_inputs(browser, site):
     _, url = site
     page = browser.new_page(viewport={"width": 1280, "height": 800})
     tab_sel = ("Array.from(document.querySelectorAll('#detail .detail-tabs button'))"
-               ".map(b => b.getAttribute('aria-selected')).join(',')")
+               ".map(b => b.getAttribute('aria-pressed')).join(',')")
     try:
         _goto_addps_detail(page, url)
         _settled(page)
