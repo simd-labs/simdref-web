@@ -74,6 +74,9 @@
       </div>
       <div class="results-list" id="results" tabindex="0"></div>
     </aside>
+    <!-- Static mobile back control. It lives outside #detail so the async
+         detail render (detailNode.innerHTML = ...) can never remove it. -->
+    <button id="back-results" type="button">← results</button>
     <main class="detail-panel" id="detail" tabindex="0">
       <div class="detail-empty" id="detail-empty">Select a result or search for an intrinsic / instruction.</div>
     </main>

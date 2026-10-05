@@ -909,9 +909,19 @@ function renderIntrinsicDetail(item, detail) {
     <section class="section">
       <h3>Summary</h3>
       <div>${esc(detail ? detail.description : item.description)}</div>
+    </section>
+    <section class="section">
+      <h3>Metadata</h3>
       <div class="kv-compact">
+        ${kvChip("Arch", item.display_architecture || item.architecture)}
+        ${kvChip("ISA", item.display_isa || displayIsa(item.isa))}
+        ${item.header ? kvChip("Header", item.header) : ""}
+        ${item.category ? kvChip("Category", item.subcategory ? `${item.subcategory} / ${item.category}` : item.category) : ""}
+        ${instrMeta.category ? kvChip("Instr Cat", instrMeta.category) : ""}
+        ${instrMeta.cpl ? kvChip("CPL", instrMeta.cpl) : ""}
         ${meta.supported_architectures ? kvChip("Supported", meta.supported_architectures) : ""}
         ${meta.classification_path ? kvChip("Section", meta.classification_path) : ""}
+        ${detail && detail._linkedInstruction ? kvChip("Instruction", detail._linkedInstruction) : ""}
         ${meta.argument_preparation ? kvChip("Arg Prep", meta.argument_preparation) : ""}
         ${meta.result ? kvChip("Result", meta.result) : ""}
         ${detail && detail.notes && detail.notes.length ? kvChip("Notes", detail.notes.join("; ")) : ""}
@@ -991,6 +1001,17 @@ function renderInstructionDetail(item, detail) {
     <section class="section">
       <h3>Summary</h3>
       <div>${esc(d.summary || item.summary || "-")}</div>
+    </section>
+    <section class="section">
+      <h3>Metadata</h3>
+      <div class="kv-compact">
+        ${kvChip("Mnemonic", item.display_mnemonic || item.mnemonic)}
+        ${kvChip("Form", d.display_form || item.display_form || d.form || item.form)}
+        ${kvChip("Arch", item.display_architecture || item.architecture)}
+        ${kvChip("ISA", item.display_isa || displayIsa(item.isa))}
+        ${meta.category ? kvChip("Category", meta.category) : ""}
+        ${meta.cpl ? kvChip("CPL", meta.cpl) : ""}
+      </div>
     </section>
     ${measurements.length ? `<section class="section" id="perf-sec">
       <h3>Performance</h3>
@@ -1212,22 +1233,25 @@ detailNode.addEventListener("click", (e) => {
 });
 
 /* E1: results-or-detail, one at a time (mobile) */
+const _mq768 = matchMedia("(max-width: 768px)");
+let hashUserCleared = false;  // back link clears the hash on purpose: the
+                              // hash fallback must not resurrect the entry
+function _mobileDetailIfHashHit(entry) {
+  if (_mq768.matches && entry && entry.key === decodeURIComponent(location.hash.replace(/^#/, "")))
+    document.body.dataset.mobileView = "detail";
+}
 (function () {
-  const mq = matchMedia("(max-width: 768px)");
-  function backBtn() {
-    if (document.getElementById("back-results")) return;
-    const b = document.createElement("button");
-    b.id = "back-results"; b.type = "button"; b.textContent = "\u2190 results";
-    b.addEventListener("click", (ev) => { ev.preventDefault(); ev.stopPropagation(); delete document.body.dataset.mobileView; });
-    document.getElementById("detail")?.querySelector(".detail-head")?.before(b);
-  }
-  if (mq.matches) backBtn();
-  mq.addEventListener("change", () => { if (mq.matches) backBtn(); delete document.body.dataset.mobileView; });
+  document.getElementById("back-results")?.addEventListener("click", (ev) => {
+    ev.preventDefault(); ev.stopPropagation();
+    delete document.body.dataset.mobileView;
+    hashUserCleared = true;
+    location.hash = "";
+  });
+  _mq768.addEventListener("change", () => { delete document.body.dataset.mobileView; });
   document.addEventListener("click", (e) => {
-    if (!mq.matches) return;
+    if (!_mq768.matches) return;
     if (!e.target.closest("#results .result")) return;
     document.body.dataset.mobileView = "detail";
-    backBtn();
   });
 })();
 
@@ -1261,13 +1285,16 @@ function renderResults() {
   syncResultsCount(query);
   prefetchIntrinsicChunks(resultPool.slice(0, 16));
 
-  // Auto-select. A hash entry resolves through the catalog even when the
-  // result pool is empty (empty query): bookmarked links must still open.
+  // Auto-select. An empty query keeps the landing list empty; a hash entry
+  // resolves through the catalog (bookmarked links must open even when the
+  // query the hash seeded finds nothing under the current filters), except
+  // for a hash the user cleared on purpose (back link) while a user-typed
+  // query shows its no-results state instead.
   const fromHash = decodeURIComponent(location.hash.replace(/^#/, ""));
   const selected = resultPool.find(e => e.key === activeKey)
     || resultPool[0]
-    || _hashEntry(fromHash);
-  if (selected) renderDetail(selected);
+    || (fromHash && !hashUserCleared && _hashEntry(fromHash));
+  if (selected) { _mobileDetailIfHashHit(selected); renderDetail(selected); }
   else {
     detailNode.innerHTML = query ? `<div class="detail-empty">No results for "${esc(query)}".</div>` : _EX();
   }
@@ -1610,12 +1637,12 @@ window.addEventListener("hashchange", () => {
   const key = decodeURIComponent(location.hash.replace(/^#/, ""));
   if (!catalog || !key) return;
   let entry = _hashEntry(key);
-  if (entry) { renderDetail(entry); return; }
+  if (entry) { _mobileDetailIfHashHit(entry); renderDetail(entry); return; }
   // Hash may name an intrinsic that Phase 2 hasn't ingested yet.
   if (intrinsicsReady) {
     intrinsicsReady.then(() => {
       const retry = _hashEntry(key);
-      if (retry) renderDetail(retry);
+      if (retry) { _mobileDetailIfHashHit(retry); renderDetail(retry); }
     });
   }
 });

@@ -1,0 +1,26 @@
+{
+  "n": 2,
+  "cols": {
+    "dkey": ["ADDPS (XMM, XMM)", "VADDPS (YMM, YMM, YMM)"],
+    "dform": [0, 0],
+    "form": [0, 0],
+    "dmn": ["ADDPS", "VADDPS"],
+    "mn": [0, 0],
+    "key": [0, 0],
+    "sum": [
+      "Add packed single-precision floating-point values.",
+      "Add packed single-precision floating-point values."
+    ],
+    "isa": [0, 1],
+    "arch": [0, 0],
+    "perf": [0, 0]
+  },
+  "isa": [
+    [["SSE"], "SSE", ["SSE"], ["SSE"]],
+    [["AVX"], "AVX", ["AVX"], ["AVX"]]
+  ],
+  "arch": [["x86", "x86"]],
+  "perf": [["2", "0.50"]],
+  "fields": {},
+  "summaries": {}
+}

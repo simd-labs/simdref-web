@@ -941,8 +941,6 @@ button.perf-line { background: none; border: none; padding: 0; text-align: left;
   .kind-bar .kind-label { display: none; }
   .header-right .meta { display: none; }
   #detail table { display: block; overflow-x: auto; }
-  /* F3: keep the page from scrolling sideways */
-  html, body { overflow-x: hidden; }
   .layout, .results-panel, .detail-panel { min-width: 0; }
   .header { flex-wrap: wrap; row-gap: .3rem; padding: .4rem .6rem; }
   .header-left { min-width: 0; flex-wrap: wrap; }

@@ -9,8 +9,6 @@ number-key guards.
 
 from __future__ import annotations
 
-import os
-import socket
 import threading
 from contextlib import contextmanager
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -23,13 +21,16 @@ from playwright.sync_api import Error as PlaywrightError, sync_playwright  # noq
 
 import sys
 sys.path.insert(0, str(Path(__file__).parent))
-from test_web_e2e import _populate_site  # noqa: E402
+from test_web_e2e import FIXTURE_SITE_DATA, SITE_DATA, _free_port, _populate_site  # noqa: E402
 
-
-def _free_port() -> int:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(("127.0.0.1", 0))
-        return s.getsockname()[1]
+# The R2 pin tests assert on real catalog entries (NEG's missing perf, ADDPS's
+# linked intrinsics and doc links, measured + modeled perf rows) that the
+# hand-authored fixture deliberately omits. They run against a real
+# `simdref export` (SIMDREF_WEB_SITE_DATA, set in CI); on the fixture they
+# would fail on data, not behaviour.
+NEEDS_EXPORT = pytest.mark.skipif(
+    SITE_DATA == FIXTURE_SITE_DATA,
+    reason="needs a real simdref export (SIMDREF_WEB_SITE_DATA); the fixture is too small")
 
 
 class _Quiet(SimpleHTTPRequestHandler):
@@ -129,6 +130,15 @@ def test_f3_no_horizontal_overflow_at_390(browser, site):
         page.wait_for_function("() => document.getElementById('results-count').textContent.length > 0")
         sw = page.evaluate("document.documentElement.scrollWidth")
         assert sw <= 390, f"document scrollWidth {sw}px at a 390px viewport"
+        past = page.evaluate(
+            """Array.from(document.querySelectorAll('body *')).map(el => {
+                const r = el.getBoundingClientRect();
+                return (el.children.length === 0 || el.matches('header, button, input, main, aside, .results-list, .search-bar'))
+                    && r.right > document.documentElement.clientWidth + 1 && r.width > 0
+                    ? (el.tagName + '.' + el.className + ' right=' + Math.round(r.right)) : null;
+            }).filter(Boolean)"""
+        )
+        assert not past, f"elements past the 390px viewport: {past[:10]}"
     finally:
         page.close()
 
@@ -195,6 +205,7 @@ def _tab(page, label):
         timeout=10_000)
 
 
+@NEEDS_EXPORT
 def test_linked_intrinsics_live_in_related_tab(browser, site):
     """R2-4: an instruction's linked-intrinsics section sits under the
     Related tab, not Semantics. Real data: ADDPS links _mm_add_ps."""
@@ -215,6 +226,7 @@ def test_linked_intrinsics_live_in_related_tab(browser, site):
         page.close()
 
 
+@NEEDS_EXPORT
 def test_default_tab_falls_back_when_no_perf(browser, site):
     """R2-3: an entry with no measurements opens on a tab with content, not
     an empty Perf panel."""
@@ -259,6 +271,7 @@ def _set_perf_kinds(page, kinds):
     )
 
 
+@NEEDS_EXPORT
 def test_perf_summary_obeys_source_filter(browser, site):
     """R2-6: the head perf summary filters through enabledPerfKinds, like
     renderMeasurements. ADDPS carries measured and modeled rows."""
@@ -287,6 +300,7 @@ def test_perf_summary_obeys_source_filter(browser, site):
         page.close()
 
 
+@NEEDS_EXPORT
 def test_documentation_links_restored(browser, site):
     """R2-8: instruction detail keeps the Reference/uops.info links from
     metadata, exactly as origin/main rendered them. ADDPS has both."""
@@ -304,6 +318,7 @@ def test_documentation_links_restored(browser, site):
         page.close()
 
 
+@NEEDS_EXPORT
 def test_perf_goto_switches_tab_then_scrolls(browser, site):
     """R2-7: the perf summary control selects the Perf tab, then scrolls."""
     _, url = site
@@ -311,24 +326,31 @@ def test_perf_goto_switches_tab_then_scrolls(browser, site):
     try:
         _goto_addps_detail(page, url)
         _settled(page)
+        _set_perf_kinds(page, ["measured", "modeled"])
         _tab(page, "Semantics")
-        page.evaluate("""(() => {
-            localStorage.setItem('simdref-perf-kinds', JSON.stringify(['measured','modeled']));
-            const q = document.querySelector('#detail .perf-line');
-            if (q) q.click();
-        })()""")
+        page.evaluate("document.querySelector('#detail .perf-line')?.click()")
         page.wait_for_function(
             "Array.from(document.querySelectorAll('#detail .detail-tabs button'))"
             ".find(b => /Perf/.test(b.textContent))?.getAttribute('aria-selected') === 'true'",
             timeout=10_000)
         assert page.evaluate(
             "document.getElementById('perf-sec')?.classList.contains('detail-hidden')") is False
+        page.wait_for_timeout(200)
+        box = page.evaluate(
+            """(() => {
+                const el = document.getElementById('perf-sec');
+                if (!el) return null;
+                const r = el.getBoundingClientRect();
+                return {top: r.top, bottom: r.bottom, vh: window.innerHeight};
+            })()""")
+        assert box and box["bottom"] > 0 and box["top"] < box["vh"], box
     finally:
         page.close()
 
 
+@NEEDS_EXPORT
 def test_number_keys_ignore_modifiers_and_inputs(browser, site):
-    """R2-9: Ctrl/Alt/Meta+digit and typing into an input never switch tabs."""
+    """R2-9: Ctrl/Meta/Alt+digit and typing into an input never switch tabs."""
     _, url = site
     page = browser.new_page(viewport={"width": 1280, "height": 800})
     tab_sel = ("Array.from(document.querySelectorAll('#detail .detail-tabs button'))"
@@ -336,20 +358,24 @@ def test_number_keys_ignore_modifiers_and_inputs(browser, site):
     try:
         _goto_addps_detail(page, url)
         _settled(page)
+        _tab(page, "Semantics")  # non-Perf tab so a bare '1' would visibly change it
         page.evaluate("document.getElementById('detail').focus()")
         page.wait_for_timeout(100)
         sel0 = page.evaluate(tab_sel)
-        assert "true" in sel0, sel0
-        page.keyboard.down("Control")
+        assert sel0.startswith("false,true"), sel0  # started on tab 2, not 1
+        # bare key (no modifier) still switches, proving the tab bar is live
         page.keyboard.press("1")
-        page.keyboard.up("Control")
-        page.wait_for_timeout(100)
-        assert page.evaluate(tab_sel) == sel0
-        page.keyboard.down("Alt")
+        page.wait_for_timeout(150)
+        assert page.evaluate(tab_sel) != sel0, "bare 1 should switch tab"
         page.keyboard.press("2")
-        page.keyboard.up("Alt")
-        page.wait_for_timeout(100)
-        assert page.evaluate(tab_sel) == sel0
+        page.wait_for_timeout(150)
+        sel0 = page.evaluate(tab_sel)
+        for mod in ("Control", "Meta", "Alt"):
+            page.keyboard.down(mod)
+            page.keyboard.press("1")
+            page.keyboard.up(mod)
+            page.wait_for_timeout(100)
+            assert page.evaluate(tab_sel) == sel0, mod
         page.locator("#query").click()
         page.keyboard.press("2")
         page.wait_for_timeout(100)

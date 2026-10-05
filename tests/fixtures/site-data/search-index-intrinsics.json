@@ -1,0 +1,30 @@
+{
+  "n": 2,
+  "cols": {
+    "name": ["_mm_add_ps", "_mm256_add_ps"],
+    "isa": [0, 1],
+    "arch": [0, 0],
+    "perf": [0, 0],
+    "desc": [0, 1],
+    "ins": [0, 1],
+    "prim": [0, 1],
+    "arm": [-1, -1],
+    "cat": [-1, -1]
+  },
+  "isa": [
+    [["SSE"], "SSE", ["SSE"], ["SSE"]],
+    [["AVX"], "AVX", ["AVX"], ["AVX"]]
+  ],
+  "arch": [["x86", "x86"]],
+  "perf": [["2", "0.50"]],
+  "desc": [
+    "Add packed single-precision floating-point values in a and b.",
+    "Performs a SIMD addition of eight packed single-precision floating-point elements in m1 and m2."
+  ],
+  "ins": ["ADDPS (XMM, XMM)", "VADDPS (YMM, YMM, YMM)"],
+  "prim": ["x86:addps (xmm, xmm)", "x86:vaddps (ymm, ymm, ymm)"],
+  "arm": [],
+  "cat": [],
+  "fields": {},
+  "summaries": {}
+}
