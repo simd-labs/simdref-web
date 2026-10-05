@@ -1053,6 +1053,7 @@ async function renderDetail(entry) {
   // mobile view for our own write. No marker when the hash is unchanged:
   // no hashchange event fires for it and the marker would go stale.
   const nextHash = "#" + encodeURIComponent(entry.key);
+  appWrittenHashes.add(nextHash);
   if (location.hash !== nextHash) {
     appWrittenHash = nextHash;
     location.hash = encodeURIComponent(entry.key);
@@ -1099,6 +1100,28 @@ async function renderDetail(entry) {
 }
 
 /* ── ISA Filters ──────────────────────────────────────────────────── */
+
+/* Empty-query behaviour: with all filters at their defaults the start
+   page shows the examples and no result list; once the user changes any
+   filter (ISA, kind, perf source) an empty query browses the filtered
+   set exactly like origin/main. "Changed" is state differing from the
+   post-bootstrap snapshot; perf kinds default to ["measured","modeled"]
+   regardless of the localStorage value. */
+let _filterSnapshot = null;
+function _snapshotFilters(perfKinds) {
+  return JSON.stringify([
+    enableAllIsas,
+    [...enabledIsas].sort(),
+    [...enabledSubIsas].map(([k, v]) => [k, [...v].sort()]).sort(),
+    enabledArmArch === null ? null : [...enabledArmArch].sort(),
+    [...enabledKinds].sort(),
+    (perfKinds || [...enabledPerfKinds]).sort(),
+  ]);
+}
+function filtersModifiedByUser() {
+  return _filterSnapshot !== null
+    && _snapshotFilters() !== _filterSnapshot;
+}
 
 function updateIsaSummary() {
   if (enableAllIsas) { isaSummary.textContent = "ISA: All"; return; }
@@ -1262,10 +1285,14 @@ function renderResults() {
   const query = queryInput.value.trim();
   if (!catalog) return;
   if (visibleSet === null) rebuildVisibleSet();
-  const visible = searchEntries.filter((_, i) => visibleSet.has(i));
-  if (!query) {
+  if (!query && !filtersModifiedByUser()) {
+    // Plain start page: examples, no persistent full-array pool.
     resultPool = [];
+  } else if (!query) {
+    // Empty query, user-touched filters: browse the visible set like main.
+    resultPool = searchEntries.filter((_, i) => visibleSet.has(i));
   } else {
+    const visible = searchEntries.filter((_, i) => visibleSet.has(i));
     const cids = candidateIndexes(query);
     const pool = cids == null ? visible : cids.filter(i => visibleSet.has(i)).map(i => searchEntries[i]);
     resultPool = pool
@@ -1288,8 +1315,18 @@ function renderResults() {
   syncResultsCount(query);
   prefetchIntrinsicChunks(resultPool.slice(0, 16));
 
-  // Auto-select
-  const fromHash = decodeURIComponent(location.hash.replace(/^#/, ""));
+  // Auto-select. A hash the app wrote itself (auto-selection, row click)
+  // is not a deep link: on the plain start page it gets dropped instead
+  // of re-selecting its entry. A hash the user opened (page load, pasted
+  // link, back/forward) still selects.
+  let fromHash = decodeURIComponent(location.hash.replace(/^#/, ""));
+  if (!query && !filtersModifiedByUser() && fromHash && appWrittenHashes.has(location.hash)) {
+    history.replaceState(null, "", location.pathname + location.search);
+    appWrittenHashes.delete(location.hash);
+    appWrittenHash = null;
+    activeKey = null;
+    fromHash = "";
+  }
   const selected = resultPool.find(e => e.key === activeKey)
     || resultPool.find(e => e.key === fromHash)
     || (!query && _hashEntry(fromHash))
@@ -1626,6 +1663,7 @@ queryInput.addEventListener("keydown", (e) => {
 /* ── Hash navigation ──────────────────────────────────────────────── */
 let intrinsicsReady = null;  // resolved by Phase-2 bootstrap
 let appWrittenHash = null;   // last hash renderDetail wrote itself
+const appWrittenHashes = new Set();  // every hash renderDetail has written
 
 function _hashEntry(key) {
   if (!catalog || !key) return null;
@@ -1753,6 +1791,10 @@ Promise.all([
                       : (ARCH_PRESETS["intel"] ? "intel" : null);
       if (candidate) applyIsaPreset(candidate);
     } catch (_) { /* ignore malformed URL */ }
+
+    // Empty-query behaviour pins against this state. Perf kinds count as
+    // default ["measured","modeled"] even if localStorage narrows them.
+    _filterSnapshot = _snapshotFilters(["measured", "modeled"]);
 
     rebuildVisibleSet();
 
