@@ -27,12 +27,19 @@ from playwright.sync_api import Error as PlaywrightError, sync_playwright  # noq
 
 
 REPO_ROOT = Path(__file__).parent.parent
-FIXTURE_SITE_DATA = REPO_ROOT / "tests" / "fixtures" / "site-data"
-STATIC_FILES = ("index.html", "app.js", "style.css", "favicon.svg", "logo.svg")
 
-# CI points this at a real `simdref export` output (see rebuild-site.yml) so a
-# core format change fails here instead of silently shipping a broken site.
-SITE_DATA = Path(os.environ["SIMDREF_WEB_SITE_DATA"]) if "SIMDREF_WEB_SITE_DATA" in os.environ else FIXTURE_SITE_DATA
+# The web app is a client of `simdref export` output only; this repo ships
+# static files and deliberately carries no runtime dependency on the
+# `simdref` package (see pyproject's dependency-groups note). The old
+# committed fixture was hand-authored against a long-since-renamed export
+# schema, so the e2e tests run against a real export via
+# SIMDREF_WEB_SITE_DATA (CI sets it in rebuild-site.yml) and skip otherwise.
+SITE_DATA = (Path(os.environ["SIMDREF_WEB_SITE_DATA"]) if "SIMDREF_WEB_SITE_DATA" in os.environ
+             else None)
+if SITE_DATA is None:
+    pytest.skip("no site data; set SIMDREF_WEB_SITE_DATA", allow_module_level=True)
+FIXTURE_SITE_DATA = SITE_DATA  # kept for test_web_fixes' import
+STATIC_FILES = ("index.html", "app.js", "style.css", "favicon.svg", "logo.svg")
 
 
 def _populate_site(out: Path) -> None:

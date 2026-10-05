@@ -788,8 +788,12 @@ const operandHeaders = [
 function _nums(v) { return String(v == null ? "" : v).match(/\d+(?:\.\d+)?/g)?.map(Number) || []; }
 function perfSummary(ms) {
   if (!ms || !ms.length) return "";
-  const rows = ms.filter(r => (r.sourceKind || "measured") === "measured");
-  const use = rows.length ? rows : ms;
+  // Same source selection as renderMeasurements: enabled kinds only,
+  // measured preferred when it survives the filter.
+  const enabled = ms.filter(r => enabledPerfKinds.has(r.sourceKind || "measured"));
+  const rows = enabled.filter(r => (r.sourceKind || "measured") === "measured");
+  const use = rows.length ? rows : enabled;
+  if (!use.length) return "";
   const lat = use.flatMap(r => _nums(r.latency)), cpi = use.flatMap(r => _nums(r.tpLoop)).sort((a, b) => a - b);
   const uo = use.flatMap(r => _nums(r.uops)).sort((a, b) => a - b);
   const med = x => x[Math.floor(x.length / 2)];
@@ -797,8 +801,13 @@ function perfSummary(ms) {
   if (lat.length) { const lo = Math.min(...lat), hi = Math.max(...lat); p.push(`Latency ${lo === hi ? lo : lo + "-" + hi} cycles`); }
   if (cpi.length) p.push(`CPI ${med(cpi)}`);
   if (uo.length) p.push(`${med(uo)} uop${med(uo) === 1 ? "" : "s"}`);
-  return p.length ? `<div class="perf-line" title="Go to Performance" onclick="document.getElementById('perf-sec')?.scrollIntoView({behavior:'smooth'})">${esc(p.join(" · "))}</div>` : "";
+  return p.length ? `<button type="button" class="perf-line" id="perf-goto">Go to Performance: ${esc(p.join(" · "))}</button>` : "";
 }
+detailNode.addEventListener("click", (e) => {
+  if (!e.target.closest("#perf-goto")) return;
+  _c3pick("Perf");
+  document.getElementById("perf-sec")?.scrollIntoView({ behavior: "smooth" });
+});
 function copyBtns(name, sig) {
   return sig
     ? `<button class="copy-btn sig-btn" data-copy="${esc(sig)}" title="Copy signature">Copy signature</button>`
@@ -809,22 +818,28 @@ const C3_TABS = [["1", "Perf"], ["2", "Semantics"], ["3", "Operands"], ["4", "Re
 let c3Tab = "";
 try { c3Tab = localStorage.getItem("simdref-c3-tab") || ""; } catch (_) {}
 function _c3secKind(sec) {
+  if (sec.id === "perf-sec") return "Perf";
   const h = (sec.querySelector("h3")?.textContent || "").toLowerCase();
   if (h.includes("performance")) return "Perf";
   if (h.includes("operands")) return "Operands";
-  if (h.includes("instructions") || h.includes("intrinsic equivalents") || h.includes("related")) return "Related";
+  if (h.includes("instructions") || h.includes("intrinsics") || h.includes("intrinsic equivalents") || h.includes("related")) return "Related";
   return "Semantics";
 }
 function _c3apply() {
   const detail = document.getElementById("detail");
   if (!detail) return;
-  const t = c3Tab || "Perf";
-  for (const sec of detail.querySelectorAll("section.section")) {
-    if (sec.closest(".detail-head")) continue;
-    sec.classList.toggle("detail-hidden", _c3secKind(sec) !== t);
+  const secs = [...detail.querySelectorAll("section.section")].filter(s => !s.closest(".detail-head"));
+  const kinds = new Map(secs.map(s => [s, _c3secKind(s)]));
+  let t = c3Tab;
+  if (!t || ![...kinds.values()].includes(t)) {
+    t = C3_TABS.map(([, l]) => l).find(l => [...kinds.values()].includes(l)) || "";
   }
+  for (const [sec, k] of kinds) sec.classList.toggle("detail-hidden", k !== t);
   for (const b of detail.querySelectorAll(".detail-tabs button")) {
-    b.setAttribute("aria-selected", b.textContent.replace(/^\d /, "") === t ? "true" : "false");
+    const label = b.textContent.replace(/^\d /, "");
+    const has = [...kinds.values()].includes(label);
+    b.disabled = !has;
+    b.setAttribute("aria-selected", has && label === t ? "true" : "false");
   }
 }
 function _c3pick(label) {
@@ -851,7 +866,10 @@ function _c3bar() {
   }, 0);
 }
 document.addEventListener("keydown", (e) => {
-  if (!document.getElementById("detail")?.contains(document.activeElement)) return;
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  const ae = document.activeElement;
+  if (ae && (ae.tagName === "INPUT" || ae.tagName === "TEXTAREA" || ae.isContentEditable)) return;
+  if (!document.getElementById("detail")?.contains(ae)) return;
   const t = C3_TABS.find(([k]) => k === e.key);
   if (t) { e.preventDefault(); _c3pick(t[1]); }
 });
@@ -861,7 +879,7 @@ function renderIntrinsicDetail(item, detail) {
   const linked = (linkedRefs.length
     ? linkedRefs.map(ref => catalog.instrByKey[ref.key] || catalog.instrByDisplayKey[ref.display_key] || catalog.instrByMnem[ref.name])
     : (item.instructions || []).map(k => catalog.instrByDisplayKey[k] || catalog.instrByKey[k] || catalog.instrByMnem[k]))
-    .filter(Boolean).filter(r => isaVisible(r.isa));
+    .filter(Boolean).filter(r => isaVisible(r));
 
   const hasMeasurements = detail && detail._measurements && detail._measurements.length;
   const hasOperands = detail && detail._operands && detail._operands.length;
@@ -881,8 +899,10 @@ function renderIntrinsicDetail(item, detail) {
       </div>
       <div class="kv-links">
         ${instrPdfRefs.map(ref => `<a class="kv-link" href="${esc(ref.url || "")}" target="_blank" rel="noreferrer">${esc(ref.label || ref.source_id || "PDF")}${ref.page_start ? ` p${esc(ref.page_start)}` : ""}</a>`).join("")}
-        ${instrMeta.url ? kvLink("uops.info", canonUrl(instrMeta.url)) : ""}
         ${detail && detail.url ? kvLink("Source", detail.url) : ""}
+        ${meta.reference_url ? kvLink("Reference", meta.reference_url) : ""}
+        ${instrMeta.url ? kvLink("uops.info", canonUrl(instrMeta.url)) : ""}
+        ${instrMeta["url-ref"] ? kvLink("Instr Ref", canonUrl(instrMeta["url-ref"])) : ""}
       </div>
       ${perfSummary(detail && detail._measurements)}
     </div>
@@ -939,7 +959,7 @@ function renderInstructionDetail(item, detail) {
   const d = detail || {};
   const linked = (d.linked_intrinsics || [])
     .map(n => catalog.intrByName[n])
-    .filter(Boolean).filter(r => isaVisible(r.isa));
+    .filter(Boolean).filter(r => isaVisible(r));
 
   const measurements = d.measurements || [];
   const operands = d.operand_details || [];
@@ -964,6 +984,7 @@ function renderInstructionDetail(item, detail) {
       <div class="kv-links">
         ${pdfRefs.map(ref => `<a class="kv-link" href="${esc(ref.url || "")}" target="_blank" rel="noreferrer">${esc(ref.label || ref.source_id || "PDF")}${ref.page_start ? ` p${esc(ref.page_start)}` : ""}</a>`).join("")}
         ${meta.url ? kvLink("uops.info", canonUrl(meta.url)) : ""}
+        ${meta["url-ref"] ? kvLink("Reference", canonUrl(meta["url-ref"])) : ""}
       </div>
       ${perfSummary(measurements)}
     </div>
@@ -1198,7 +1219,7 @@ detailNode.addEventListener("click", (e) => {
     const b = document.createElement("button");
     b.id = "back-results"; b.type = "button"; b.textContent = "\u2190 results";
     b.addEventListener("click", (ev) => { ev.preventDefault(); ev.stopPropagation(); delete document.body.dataset.mobileView; });
-    document.getElementById("detail")?.prepend(b);
+    document.getElementById("detail")?.querySelector(".detail-head")?.before(b);
   }
   if (mq.matches) backBtn();
   mq.addEventListener("change", () => { if (mq.matches) backBtn(); delete document.body.dataset.mobileView; });
@@ -1214,11 +1235,10 @@ function renderResults() {
   const query = queryInput.value.trim();
   if (!catalog) return;
   if (visibleSet === null) rebuildVisibleSet();
-  const visible = searchEntries.filter((_, i) => visibleSet.has(i));
-
   if (!query) {
     resultPool = [];
   } else {
+    const visible = searchEntries.filter((_, i) => visibleSet.has(i));
     const cids = candidateIndexes(query);
     const pool = cids == null ? visible : cids.filter(i => visibleSet.has(i)).map(i => searchEntries[i]);
     resultPool = pool
@@ -1241,11 +1261,12 @@ function renderResults() {
   syncResultsCount(query);
   prefetchIntrinsicChunks(resultPool.slice(0, 16));
 
-  // Auto-select
+  // Auto-select. A hash entry resolves through the catalog even when the
+  // result pool is empty (empty query): bookmarked links must still open.
   const fromHash = decodeURIComponent(location.hash.replace(/^#/, ""));
   const selected = resultPool.find(e => e.key === activeKey)
-    || resultPool.find(e => e.key === fromHash)
-    || resultPool[0];
+    || resultPool[0]
+    || _hashEntry(fromHash);
   if (selected) renderDetail(selected);
   else {
     detailNode.innerHTML = query ? `<div class="detail-empty">No results for "${esc(query)}".</div>` : _EX();
@@ -1515,6 +1536,21 @@ for (const cb of document.querySelectorAll('#kind-bar input[data-kind]')) {
     cb.parentElement.classList.toggle("active", cb.checked);
     visibleSet = null;
     scheduleFilterRender();
+  });
+}
+
+/* Perf-source filter — measured vs modeled. Same live-update path as the
+   kind filter; the choice persists across reloads. */
+for (const cb of document.querySelectorAll('#kind-bar input[data-perf-kind]')) {
+  cb.checked = enabledPerfKinds.has(cb.dataset.perfKind);
+  cb.parentElement.classList.toggle("active", cb.checked);
+  cb.addEventListener("change", () => {
+    const kind = cb.dataset.perfKind;
+    if (cb.checked) enabledPerfKinds.add(kind); else enabledPerfKinds.delete(kind);
+    persistPerfKinds();
+    cb.parentElement.classList.toggle("active", cb.checked);
+    const active = resultPool.find(e => e.key === activeKey) || _hashEntry(decodeURIComponent(location.hash.replace(/^#/, "")));
+    if (active) renderDetail(active);
   });
 }
 

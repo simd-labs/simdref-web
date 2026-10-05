@@ -923,6 +923,7 @@ pre.sig { font-family: var(--font-mono); font-size: .85rem; border: 1px solid va
 .perf-line { margin-top: .5rem; font-size: .85rem; color: var(--text-secondary); cursor: pointer; font-family: var(--font-mono); }
 .perf-line:hover { color: var(--accent); }
 .detail-head .kv-links { margin-top: .4rem; }
+button.perf-line { background: none; border: none; padding: 0; text-align: left; }
 .detail-tabs { display: flex; gap: .2rem; border-bottom: 1px solid var(--border); margin: .6rem 0; }
 .detail-tabs button { background: none; border: none; border-bottom: 2px solid transparent; padding: .35rem .7rem;
   font: inherit; font-size: .82rem; cursor: pointer; color: var(--text-secondary); }
@@ -936,7 +937,8 @@ pre.sig { font-family: var(--font-mono); font-size: .85rem; border: 1px solid va
   body:not([data-mobile-view="detail"]) .detail-panel { display: none; }
   body[data-mobile-view="detail"] .results-panel { display: none; }
   body[data-mobile-view="detail"] #back-results { display: block; position: sticky; top: 0; z-index: 2; }
-  .kind-bar { display: none; }
+  .kind-bar { flex-wrap: wrap; }
+  .kind-bar .kind-label { display: none; }
   .header-right .meta { display: none; }
   #detail table { display: block; overflow-x: auto; }
   /* F3: keep the page from scrolling sideways */
