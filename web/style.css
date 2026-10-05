@@ -939,8 +939,6 @@ pre.sig { font-family: var(--font-mono); font-size: .85rem; border: 1px solid va
   .kind-bar { display: none; }
   .header-right .meta { display: none; }
   #detail table { display: block; overflow-x: auto; }
-}
-@media (max-width: 768px) {
   /* F3: keep the page from scrolling sideways */
   html, body { overflow-x: hidden; }
   .layout, .results-panel, .detail-panel { min-width: 0; }

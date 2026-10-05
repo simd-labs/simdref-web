@@ -5,7 +5,6 @@ const $ = (id) => document.getElementById(id);
 const queryInput     = $("query");
 const resultsNode    = $("results");
 const detailNode     = $("detail");
-const detailEmpty    = $("detail-empty");
 const metaNode       = $("meta");
 const resultsCount   = $("results-count");
 const isaSummary     = $("isa-summary");
@@ -1001,7 +1000,6 @@ function renderInstructionDetail(item, detail) {
 /* ── Detail view ──────────────────────────────────────────────────── */
 async function renderDetail(entry) {
   activeKey = entry.key;
-  detailEmpty.style.display = "none";
 
   // Highlight in results
   for (const n of resultsNode.querySelectorAll(".result")) {
@@ -1604,10 +1602,9 @@ function showLoadError(message) {
   console.error("simdref:", message);
   if (metaNode) metaNode.textContent = "catalog load failed";
   if (resultsCount) resultsCount.textContent = "Failed to load search index";
-  if (detailEmpty) {
-    detailEmpty.textContent = message;
-    detailEmpty.style.display = "";
-  }
+  // #detail-empty is detached once renderDetail writes innerHTML; the load
+  // error must land in the live detail panel instead.
+  detailNode.innerHTML = `<div class="detail-empty" id="detail-empty">${esc(message)}</div>`;
   window.__loadError = true;
 }
 

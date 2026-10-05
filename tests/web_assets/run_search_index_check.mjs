@@ -85,8 +85,6 @@ const windowStub = {
   navigator: {clipboard: {writeText: () => Promise.resolve()}, userAgent: "node"},
 };
 
-const matchMediaStub = windowStub.matchMedia;
-
 const documentStub = new Proxy(
   {
     getElementById: () => makeElement(),
@@ -114,7 +112,7 @@ const sandbox = {
   document: documentStub,
   navigator: windowStub.navigator,
   location: windowStub.location,
-  matchMedia: matchMediaStub,
+  matchMedia: windowStub.matchMedia,
   localStorage: {getItem: () => null, setItem: noop, removeItem: noop},
   // fetch hangs — bootstrap will register but never complete.
   fetch: () => new Promise(() => {}),
