@@ -895,7 +895,7 @@ function renderIntrinsicDetail(item, detail) {
       <div class="chips">
         ${((item.display_isa_tokens || item.isa || [])).map(v => `<span class="chip">${esc(Array.isArray(v) ? displayIsa(v) : v)}</span>`).join("")}
         ${item.header ? `<span class="chip">${esc(item.header)}</span>` : ""}
-        ${detail && detail._linkedInstruction ? (linked[0] ? `<a class="chip xref" href="#${encodeURIComponent(linked[0].key)}" data-kind="instruction" data-key="${esc(linked[0].key)}">${esc(detail._linkedInstruction)}</a>` : `<span class="chip">${esc(detail._linkedInstruction)}</span>`) : ""}
+        ${detail && detail._linkedInstruction && linked[0] ? `<a class="chip xref" href="#${encodeURIComponent(linked[0].key)}" data-kind="instruction" data-key="${esc(linked[0].key)}">${esc(linked[0].display_key || linked[0].key)}</a>` : ""}
       </div>
       <div class="kv-links">
         ${instrPdfRefs.map(ref => `<a class="kv-link" href="${esc(ref.url || "")}" target="_blank" rel="noreferrer">${esc(ref.label || ref.source_id || "PDF")}${ref.page_start ? ` p${esc(ref.page_start)}` : ""}</a>`).join("")}
@@ -1232,28 +1232,22 @@ detailNode.addEventListener("click", (e) => {
   scheduleRender();
 });
 
-/* E1: results-or-detail, one at a time (mobile) */
+/* E1: results-or-detail, one at a time (mobile). The static #back-results
+ * button lives outside #detail so the async detail render cannot remove it.
+ * data-mobile-view="detail" is set only here: on a result-row click/tap and
+ * at page load when the URL already carries a hash (deep link). */
 const _mq768 = matchMedia("(max-width: 768px)");
-let hashUserCleared = false;  // back link clears the hash on purpose: the
-                              // hash fallback must not resurrect the entry
-function _mobileDetailIfHashHit(entry) {
-  if (_mq768.matches && entry && entry.key === decodeURIComponent(location.hash.replace(/^#/, "")))
-    document.body.dataset.mobileView = "detail";
-}
-(function () {
-  document.getElementById("back-results")?.addEventListener("click", (ev) => {
-    ev.preventDefault(); ev.stopPropagation();
-    delete document.body.dataset.mobileView;
-    hashUserCleared = true;
-    location.hash = "";
-  });
-  _mq768.addEventListener("change", () => { delete document.body.dataset.mobileView; });
-  document.addEventListener("click", (e) => {
-    if (!_mq768.matches) return;
-    if (!e.target.closest("#results .result")) return;
-    document.body.dataset.mobileView = "detail";
-  });
-})();
+document.getElementById("back-results")?.addEventListener("click", (ev) => {
+  ev.preventDefault(); ev.stopPropagation();
+  delete document.body.dataset.mobileView;
+});
+_mq768.addEventListener("change", () => { delete document.body.dataset.mobileView; });
+document.addEventListener("click", (e) => {
+  if (!_mq768.matches) return;
+  if (!e.target.closest("#results .result")) return;
+  document.body.dataset.mobileView = "detail";
+});
+if (_mq768.matches && location.hash) document.body.dataset.mobileView = "detail";
 
 function renderResults() {
   const query = queryInput.value.trim();
@@ -1285,16 +1279,12 @@ function renderResults() {
   syncResultsCount(query);
   prefetchIntrinsicChunks(resultPool.slice(0, 16));
 
-  // Auto-select. An empty query keeps the landing list empty; a hash entry
-  // resolves through the catalog (bookmarked links must open even when the
-  // query the hash seeded finds nothing under the current filters), except
-  // for a hash the user cleared on purpose (back link) while a user-typed
-  // query shows its no-results state instead.
+  // Auto-select
   const fromHash = decodeURIComponent(location.hash.replace(/^#/, ""));
   const selected = resultPool.find(e => e.key === activeKey)
-    || resultPool[0]
-    || (fromHash && !hashUserCleared && _hashEntry(fromHash));
-  if (selected) { _mobileDetailIfHashHit(selected); renderDetail(selected); }
+    || resultPool.find(e => e.key === fromHash)
+    || resultPool[0];
+  if (selected) renderDetail(selected);
   else {
     detailNode.innerHTML = query ? `<div class="detail-empty">No results for "${esc(query)}".</div>` : _EX();
   }
@@ -1637,12 +1627,12 @@ window.addEventListener("hashchange", () => {
   const key = decodeURIComponent(location.hash.replace(/^#/, ""));
   if (!catalog || !key) return;
   let entry = _hashEntry(key);
-  if (entry) { _mobileDetailIfHashHit(entry); renderDetail(entry); return; }
+  if (entry) { renderDetail(entry); return; }
   // Hash may name an intrinsic that Phase 2 hasn't ingested yet.
   if (intrinsicsReady) {
     intrinsicsReady.then(() => {
       const retry = _hashEntry(key);
-      if (retry) { _mobileDetailIfHashHit(retry); renderDetail(retry); }
+      if (retry) renderDetail(retry);
     });
   }
 });

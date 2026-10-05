@@ -65,6 +65,7 @@ def _serve(directory: Path, port: int):
         yield
     finally:
         httpd.shutdown()
+        httpd.server_close()
         thread.join(timeout=2)
 
 
