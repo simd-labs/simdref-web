@@ -163,11 +163,10 @@ def _settled(page):
     """Wait until Phase-2 ingest is done and a detail with tabs is shown.
 
     During ingest the app re-renders per batch and the tab bar blinks out
-    and back; one-shot evaluates can land in the gap. intrinsicsReady
-    resolves only when every batch has been folded in (same approach as
-    test_web_e2e._wait_intrinsics_loaded)."""
-    page.wait_for_function("() => intrinsicsReady !== null", timeout=60_000)
-    page.evaluate("() => intrinsicsReady")
+    and back; one-shot evaluates can land in the gap. The app sets
+    document.body.dataset.phase2 once the last batch is folded in."""
+    page.wait_for_function(
+            "() => document.body.dataset.phase2 === 'done'", timeout=60_000)
     page.wait_for_function(
         "() => document.querySelectorAll('#detail .detail-tabs button').length === 4",
         timeout=60_000)
@@ -223,8 +222,8 @@ def test_default_tab_falls_back_when_no_perf(browser, site):
         # NEG (R32, R32) carries no measurements. It is not in the default
         # search pool, so navigate through the live hashchange handler,
         # which resolves the key through the catalog.
-        page.wait_for_function("() => window.intrinsicsReady !== null", timeout=60_000)
-        page.evaluate("() => intrinsicsReady")
+        page.wait_for_function(
+            "() => document.body.dataset.phase2 === 'done'", timeout=60_000)
         page.evaluate("location.hash = '#x86%3Aneg%20(r32%2C%20r32)'")
         page.wait_for_function(
             "() => document.querySelector('#detail .detail-head')", timeout=20_000)
@@ -281,6 +280,22 @@ def test_perf_summary_obeys_source_filter(browser, site):
         _goto_addps_detail(page, url)
         mod = page.evaluate("document.querySelector('#detail .perf-line')?.innerText || ''")
         assert (mod != meas) or (mod == ""), (meas, mod)
+        # ADDPS has no modeled rows: model-only chips show nothing for it.
+        # Pick an entry that really has modeled data (arm abs is
+        # modeled-only in the export) and assert a non-empty summary.
+        page.evaluate("document.getElementById('isa-all').click()")
+        page.locator("#query").fill("abs wdorwzr")
+        page.wait_for_function("document.querySelectorAll('#results .result').length > 0")
+        page.evaluate(
+            "Array.from(document.querySelectorAll('#results .result'))"
+            ".find(r => r.dataset.key === 'arm:abs (<wdorwzr>, <wnorwzr>)')?.click()")
+        page.wait_for_function(
+            "() => document.querySelector('#detail .detail-head h2')?.textContent.includes('ABS')",
+            timeout=15_000)
+        page.wait_for_function(
+            "() => !!document.querySelector('#detail .perf-line')", timeout=15_000)
+        modeled = page.evaluate("document.querySelector('#detail .perf-line')?.innerText || ''")
+        assert "Latency" in modeled, modeled
         _set_perf_kinds(page, [])
         _goto_addps_detail(page, url)
         assert page.evaluate("document.querySelector('#detail .perf-line')") is None
@@ -308,9 +323,10 @@ def test_documentation_links_restored(browser, site):
 
 @NEEDS_EXPORT
 def test_perf_goto_switches_tab_then_scrolls(browser, site):
-    """R2-7: the perf summary control selects the Perf tab, then scrolls."""
+    """R2-7: the perf summary control selects the Perf tab, then scrolls the
+    section into the viewport (it starts below the fold after the switch)."""
     _, url = site
-    page = browser.new_page(viewport={"width": 1280, "height": 800})
+    page = browser.new_page(viewport={"width": 1280, "height": 400})
     try:
         _goto_addps_detail(page, url)
         _settled(page)
@@ -323,7 +339,19 @@ def test_perf_goto_switches_tab_then_scrolls(browser, site):
             timeout=10_000)
         assert page.evaluate(
             "document.getElementById('perf-sec')?.classList.contains('detail-hidden')") is False
-        page.wait_for_timeout(200)
+        # At a 400px viewport the perf table is taller than the pane; scroll
+        # past it so its top is above the fold, then the goto must bring it
+        # back into view.
+        page.evaluate("const d = document.getElementById('detail'); d.scrollTop = d.scrollHeight")
+        off = page.evaluate(
+            """(() => {
+                const el = document.getElementById('perf-sec');
+                const r = el.getBoundingClientRect();
+                return {top: r.top, bottom: r.bottom, vh: window.innerHeight};
+            })()""")
+        assert off["top"] < 0 or off["top"] > off["vh"], f"perf-sec fully visible before goto: {off}"
+        page.evaluate("document.querySelector('#perf-goto')?.click()")
+        page.wait_for_timeout(600)  # smooth scroll needs a beat
         box = page.evaluate(
             """(() => {
                 const el = document.getElementById('perf-sec');

@@ -1050,9 +1050,13 @@ async function renderDetail(entry) {
   }
   // Remember the hash this render writes so hashchange can tell it apart
   // from an external hash (deep link, back/forward) and not switch the
-  // mobile view for our own write.
-  appWrittenHash = "#" + encodeURIComponent(entry.key);
-  location.hash = encodeURIComponent(entry.key);
+  // mobile view for our own write. No marker when the hash is unchanged:
+  // no hashchange event fires for it and the marker would go stale.
+  const nextHash = "#" + encodeURIComponent(entry.key);
+  if (location.hash !== nextHash) {
+    appWrittenHash = nextHash;
+    location.hash = encodeURIComponent(entry.key);
+  }
 
   if (entry.kind === "intrinsic") {
     // Load primary instruction detail for operands/measurements
@@ -1621,7 +1625,7 @@ queryInput.addEventListener("keydown", (e) => {
 
 /* ── Hash navigation ──────────────────────────────────────────────── */
 let intrinsicsReady = null;  // resolved by Phase-2 bootstrap
-let appWrittenHash = "";     // last hash renderDetail wrote itself
+let appWrittenHash = null;   // last hash renderDetail wrote itself
 
 function _hashEntry(key) {
   if (!catalog || !key) return null;
@@ -1633,7 +1637,7 @@ function _hashEntry(key) {
 window.addEventListener("hashchange", () => {
   // A hash renderDetail wrote on auto-selection/row click: not a user
   // navigation; never switch the mobile view for it.
-  if (location.hash === appWrittenHash) { appWrittenHash = ""; return; }
+  if (appWrittenHash !== null && location.hash === appWrittenHash) { appWrittenHash = null; return; }
   const key = decodeURIComponent(location.hash.replace(/^#/, ""));
   if (!catalog) return;
   // An emptied hash (back to the plain URL) returns mobile to the list.
@@ -1794,9 +1798,10 @@ function _ingestIntrinsics(metaNode) {
   }
 
   return _intrinsicsFetch.then(intrinsics => new Promise(resolve => {
+    const done = () => { document.body.dataset.phase2 = "done"; resolve(); };
     if (!Array.isArray(intrinsics) || !intrinsics.length) {
       if (badge && badge.parentNode) badge.parentNode.removeChild(badge);
-      resolve();
+      done();
       return;
     }
     catalog.intrinsics = intrinsics;
@@ -1839,7 +1844,7 @@ function _ingestIntrinsics(metaNode) {
           metaNode.textContent = `${total} intrinsics · ${(catalog.instructions || []).length} instructions`;
         }
         renderResults();
-        resolve();
+        done();
       }
     };
     schedule(pump);
