@@ -32,7 +32,7 @@ jobs:
 
       - uses: actions/setup-python@v7
         with:
-          python-version: "3.12"
+          python-version: "3.14"
 
       - name: Install simdref
         # Installs the wheel from SIMDREF_CORE_REPO's latest versioned
@@ -64,7 +64,7 @@ jobs:
           playwright install --with-deps chromium
           SIMDREF_WEB_SITE_DATA="$PWD/_site" python -m pytest tests/test_web_e2e.py -q
 
-      - uses: actions/upload-pages-artifact@v4
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: _site
 
@@ -76,4 +76,4 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
