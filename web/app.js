@@ -5,16 +5,12 @@ const $ = (id) => document.getElementById(id);
 const queryInput     = $("query");
 const resultsNode    = $("results");
 const detailNode     = $("detail");
-const detailEmpty    = $("detail-empty");
 const metaNode       = $("meta");
 const resultsCount   = $("results-count");
 const isaSummary     = $("isa-summary");
 const isaPanel       = $("isa-panel");
 const isaFamiliesNode = $("isa-families");
 const isaSubgroupsNode = $("isa-subgroups");
-const categoryPanel  = $("category-panel");
-const categoryChips  = $("category-chips");
-const categorySummary = $("category-summary");
 const themeToggle    = $("theme-toggle");
 const themeIconLight = $("theme-icon-light");
 const themeIconDark  = $("theme-icon-dark");
@@ -40,7 +36,7 @@ const LOAD_MORE_THRESHOLD_PX = 600;
 /* Viewport virtualisation — keep only rows inside the visible window
  * (plus a small buffer) in the DOM. Row height must match .result in
  * style.css. */
-const ROW_HEIGHT_PX = 56;
+const ROW_HEIGHT_PX = 68;
 const VIEWPORT_BUFFER_ROWS = 30;
 let virtualWrap = null;
 let virtualRange = { start: -1, end: -1 };
@@ -57,10 +53,6 @@ let availableIsas = [];
 let enabledIsas = new Set();
 let enableAllIsas = false;
 let enabledSubIsas = new Map();
-
-/* Category state — null means "all enabled" (no filter) */
-let availableCategories = [];   // [{family, category, subcategory, count}]
-let enabledCategories = null;
 
 /* Kind (intrinsic vs instruction/asm) filter — both enabled by default. */
 const enabledKinds = new Set(["intrinsic", "instruction"]);
@@ -169,13 +161,6 @@ function isaVisible(item) {
   return false;
 }
 
-function categoryVisible(item) {
-  if (enabledCategories === null) return true;
-  const cat = item.category || (item.metadata && item.metadata.category) || "";
-  if (!cat) return enabledCategories.has("");
-  return enabledCategories.has(cat);
-}
-
 function armArchVisible(item) {
   if (!enabledArmArch) return true;
   // Only intrinsics carry arm_arch classification; instructions are not filtered.
@@ -189,13 +174,11 @@ function armArchVisible(item) {
  * entries. Buckets:
  *   byKind:     "intrinsic" | "instruction"       -> entry indexes
  *   byFamily:   family name                        -> entry indexes
- *   byCategory: category name (or "")              -> entry indexes
  *   byArmArch:  "A32" | "A64" | "BOTH" | "__none"  -> entry indexes
  */
 let bucketsBuilt = false;
 const byKind = new Map();
 const byFamily = new Map();
-const byCategory = new Map();
 const byArmArch = new Map();
 
 function _pushBucket(map, key, i) {
@@ -205,12 +188,12 @@ function _pushBucket(map, key, i) {
 }
 
 function buildBuckets() {
-  byKind.clear(); byFamily.clear(); byCategory.clear(); byArmArch.clear();
+  byKind.clear(); byFamily.clear(); byArmArch.clear();
   extendBuckets(searchEntries, 0);
   bucketsBuilt = true;
 }
 
-/* Append ``entries`` to the kind/family/category/arm-arch buckets at
+/* Append ``entries`` to the kind/family/arm-arch buckets at
  * absolute positions ``baseIndex + offset``. Used by Phase-2 intrinsic
  * ingest so newly-arrived entries are reachable via the kind filter
  * without rebuilding from scratch. */
@@ -222,8 +205,6 @@ function extendBuckets(entries, baseIndex) {
     const fams = e.item.isa_families || [];
     if (fams.length === 0) _pushBucket(byFamily, "__none", i);
     for (const f of fams) _pushBucket(byFamily, f, i);
-    const cat = e.item.category || "";
-    _pushBucket(byCategory, cat, i);
     const arch = e.item.arm_arch || "__none";
     _pushBucket(byArmArch, arch, i);
   }
@@ -256,11 +237,6 @@ function rebuildVisibleSet() {
     if (needsSubCheck) {
       cand = _filterSet(cand, (i) => isaVisible(searchEntries[i].item));
     }
-  }
-
-  if (enabledCategories !== null) {
-    const catCand = _unionKeys(byCategory, [...enabledCategories]);
-    cand = _intersect(cand, catCand);
   }
 
   if (enabledArmArch) {
@@ -322,7 +298,7 @@ function syncResultsCount(query) {
     const nA = catalog.instructions.length;
     resultsCount.textContent = shown < resultPool.length
       ? `Showing ${shown} of ${resultPool.length} (${nI} intrinsics · ${nA} instructions)`
-      : `Type to search ${nI} intrinsics · ${nA} instructions`;
+      : `${nI} intrinsics · ${nA} instructions`;
   } else {
     resultsCount.textContent = shown < resultPool.length
       ? `Showing ${shown} of ${resultPool.length} results`
@@ -751,8 +727,9 @@ function renderMeasurements(measurements) {
     const color = perfKindBorders[kind] || "var(--accent-green, #2ea043)";
     const groups = groupMeasurements(rows);
     let inner = "";
+    let gi = 0;
     for (const [family, frows] of groups) {
-      inner += `<details class="meas-group" open><summary>${esc(family)} (${frows.length})</summary>${renderTable(measHeaders, frows)}</details>`;
+      inner += `<details class="meas-group" ${gi++ === 0 && kind === splits[0][0] ? "open" : ""}><summary>${esc(family)} (${frows.length})</summary>${renderTable(measHeaders, frows)}</details>`;
     }
     html += `<section class="perf-panel" style="border-left:3px solid ${color};padding-left:0.6rem;margin-bottom:0.8rem">
       <h4 style="margin:0 0 0.3rem 0;color:${color};font-size:0.85rem">${esc(label)} (${rows.length})</h4>
@@ -808,12 +785,102 @@ const operandHeaders = [
   {key: "name", label: "Name", cls: "mono"},
 ];
 
+function _nums(v) { return String(v == null ? "" : v).match(/\d+(?:\.\d+)?/g)?.map(Number) || []; }
+function perfSummary(ms) {
+  if (!ms || !ms.length) return "";
+  // Same source selection as renderMeasurements: enabled kinds only,
+  // measured preferred when it survives the filter.
+  const enabled = ms.filter(r => enabledPerfKinds.has(r.sourceKind || "measured"));
+  const rows = enabled.filter(r => (r.sourceKind || "measured") === "measured");
+  const use = rows.length ? rows : enabled;
+  if (!use.length) return "";
+  const lat = use.flatMap(r => _nums(r.latency)), cpi = use.flatMap(r => _nums(r.tpLoop)).sort((a, b) => a - b);
+  const uo = use.flatMap(r => _nums(r.uops)).sort((a, b) => a - b);
+  const med = x => x[Math.floor(x.length / 2)];
+  const p = [];
+  if (lat.length) { const lo = Math.min(...lat), hi = Math.max(...lat); p.push(`Latency ${lo === hi ? lo : lo + "-" + hi} cycles`); }
+  if (cpi.length) p.push(`CPI ${med(cpi)}`);
+  if (uo.length) p.push(`${med(uo)} uop${med(uo) === 1 ? "" : "s"}`);
+  return p.length ? `<button type="button" class="perf-line" id="perf-goto">Go to Performance: ${esc(p.join(" · "))}</button>` : "";
+}
+detailNode.addEventListener("click", (e) => {
+  if (!e.target.closest("#perf-goto")) return;
+  _c3pick("Perf");
+  document.getElementById("perf-sec")?.scrollIntoView({ behavior: "smooth" });
+});
+function copyBtns(name, sig) {
+  const nameBtn = `<button class="copy-btn" data-copy="${esc(name)}" title="Copy name">Copy name</button>`;
+  return sig
+    ? `${nameBtn} <button class="copy-btn sig-btn" data-copy="${esc(sig)}" title="Copy signature">Copy signature</button>`
+    : nameBtn;
+}
+
+const C3_TABS = [["1", "Perf"], ["2", "Semantics"], ["3", "Operands"], ["4", "Related"]];
+let c3Tab = "";
+try { c3Tab = localStorage.getItem("simdref-c3-tab") || ""; } catch (_) {}
+function _c3secKind(sec) {
+  if (sec.id === "perf-sec") return "Perf";
+  const h = (sec.querySelector("h3")?.textContent || "").toLowerCase();
+  if (h.includes("performance")) return "Perf";
+  if (h.includes("operands")) return "Operands";
+  if (h.includes("instructions") || h.includes("intrinsics") || h.includes("intrinsic equivalents") || h.includes("related")) return "Related";
+  return "Semantics";
+}
+function _c3apply() {
+  const detail = document.getElementById("detail");
+  if (!detail) return;
+  const secs = [...detail.querySelectorAll("section.section")].filter(s => !s.closest(".detail-head"));
+  const kinds = new Map(secs.map(s => [s, _c3secKind(s)]));
+  let t = c3Tab;
+  if (!t || ![...kinds.values()].includes(t)) {
+    t = C3_TABS.map(([, l]) => l).find(l => [...kinds.values()].includes(l)) || "";
+  }
+  for (const [sec, k] of kinds) sec.classList.toggle("detail-hidden", k !== t);
+  for (const b of detail.querySelectorAll(".detail-tabs button")) {
+    const label = b.textContent.replace(/^\d /, "");
+    const has = [...kinds.values()].includes(label);
+    b.disabled = !has;
+    b.setAttribute("aria-pressed", has && label === t ? "true" : "false");
+  }
+}
+function _c3pick(label) {
+  c3Tab = label;
+  try { localStorage.setItem("simdref-c3-tab", label); } catch (_) {}
+  _c3apply();
+}
+function _c3bar() {
+  setTimeout(() => {
+    const detail = document.getElementById("detail");
+    if (!detail || detail.querySelector(".detail-empty") || detail.querySelector(".detail-tabs")) { _c3apply(); return; }
+    const bar = document.createElement("nav");
+    bar.className = "detail-tabs";
+    for (const [k, label] of C3_TABS) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.textContent = `${k} ${label}`;
+      b.onclick = () => _c3pick(label);
+      bar.append(b);
+    }
+    const head = detail.querySelector(".detail-head");
+    if (head) head.after(bar); else detail.prepend(bar);
+    _c3apply();
+  }, 0);
+}
+document.addEventListener("keydown", (e) => {
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  const ae = document.activeElement;
+  if (ae && (ae.tagName === "INPUT" || ae.tagName === "TEXTAREA" || ae.isContentEditable)) return;
+  if (!document.getElementById("detail")?.contains(ae)) return;
+  const t = C3_TABS.find(([k]) => k === e.key);
+  if (t) { e.preventDefault(); _c3pick(t[1]); }
+});
+
 function renderIntrinsicDetail(item, detail) {
   const linkedRefs = detail ? (detail.instruction_refs || item.instruction_refs || []) : (item.instruction_refs || []);
   const linked = (linkedRefs.length
     ? linkedRefs.map(ref => catalog.instrByKey[ref.key] || catalog.instrByDisplayKey[ref.display_key] || catalog.instrByMnem[ref.name])
     : (item.instructions || []).map(k => catalog.instrByDisplayKey[k] || catalog.instrByKey[k] || catalog.instrByMnem[k]))
-    .filter(Boolean).filter(r => isaVisible(r.isa));
+    .filter(Boolean).filter(r => isaVisible(r));
 
   const hasMeasurements = detail && detail._measurements && detail._measurements.length;
   const hasOperands = detail && detail._operands && detail._operands.length;
@@ -824,12 +891,21 @@ function renderIntrinsicDetail(item, detail) {
   return `
     <div class="detail-head">
       <span class="result-kind intrinsic">intrinsic</span>
-      <h2>${esc(item.name)} <button class="copy-btn" data-copy="${esc(item.name)}" title="Copy name">&#x2398;</button></h2>
-      <div class="detail-sub">${esc(detail ? detail.signature : item.signature)}</div>
+      <h2>${esc(item.name)} ${copyBtns(item.name, detail ? detail.signature : item.signature)}</h2>
+      <pre class="sig">${esc(detail ? detail.signature : item.signature)}</pre>
       <div class="chips">
         ${((item.display_isa_tokens || item.isa || [])).map(v => `<span class="chip">${esc(Array.isArray(v) ? displayIsa(v) : v)}</span>`).join("")}
         ${item.header ? `<span class="chip">${esc(item.header)}</span>` : ""}
+        ${detail && detail._linkedInstruction && linked[0] ? `<a class="chip xref" href="#${encodeURIComponent(linked[0].key)}" data-kind="instruction" data-key="${esc(linked[0].key)}">${esc(linked[0].display_key || linked[0].key)}</a>` : ""}
       </div>
+      <div class="kv-links">
+        ${instrPdfRefs.map(ref => `<a class="kv-link" href="${esc(ref.url || "")}" target="_blank" rel="noreferrer">${esc(ref.label || ref.source_id || "PDF")}${ref.page_start ? ` p${esc(ref.page_start)}` : ""}</a>`).join("")}
+        ${detail && detail.url ? kvLink("Source", detail.url) : ""}
+        ${meta.reference_url ? kvLink("Reference", meta.reference_url) : ""}
+        ${instrMeta.url ? kvLink("uops.info", canonUrl(instrMeta.url)) : ""}
+        ${instrMeta["url-ref"] ? kvLink("Instr Ref", canonUrl(instrMeta["url-ref"])) : ""}
+      </div>
+      ${perfSummary(detail && detail._measurements)}
     </div>
     <section class="section">
       <h3>Summary</h3>
@@ -851,21 +927,14 @@ function renderIntrinsicDetail(item, detail) {
         ${meta.result ? kvChip("Result", meta.result) : ""}
         ${detail && detail.notes && detail.notes.length ? kvChip("Notes", detail.notes.join("; ")) : ""}
       </div>
-      <div class="kv-links">
-        ${detail && detail.url ? kvLink("Source", detail.url) : ""}
-        ${meta.reference_url ? kvLink("Reference", meta.reference_url) : ""}
-        ${instrMeta.url ? kvLink("uops.info", canonUrl(instrMeta.url)) : ""}
-        ${instrMeta["url-ref"] ? kvLink("Instr Ref", canonUrl(instrMeta["url-ref"])) : ""}
-        ${instrPdfRefs.map(ref => `<a class="kv-link" href="${esc(ref.url || "")}" target="_blank" rel="noreferrer">${esc(ref.label || ref.source_id || "PDF")}${ref.page_start ? ` p${esc(ref.page_start)}` : ""}</a>`).join("")}
-      </div>
     </section>
+    ${hasMeasurements ? `<section class="section" id="perf-sec">
+      <h3>Performance</h3>
+      ${renderMeasurements(detail._measurements)}
+    </section>` : ""}
     ${hasOperands ? `<section class="section">
       <h3>Operands</h3>
       ${renderTable(operandHeaders, detail._operands)}
-    </section>` : ""}
-    ${hasMeasurements ? `<section class="section">
-      <h3>Performance</h3>
-      ${renderMeasurements(detail._measurements)}
     </section>` : ""}
     <section class="section">
       <h3>Instructions</h3>
@@ -901,7 +970,7 @@ function renderInstructionDetail(item, detail) {
   const d = detail || {};
   const linked = (d.linked_intrinsics || [])
     .map(n => catalog.intrByName[n])
-    .filter(Boolean).filter(r => isaVisible(r.isa));
+    .filter(Boolean).filter(r => isaVisible(r));
 
   const measurements = d.measurements || [];
   const operands = d.operand_details || [];
@@ -917,12 +986,18 @@ function renderInstructionDetail(item, detail) {
   return `
     <div class="detail-head">
       <span class="result-kind instruction">instruction</span>
-      <h2>${esc(item.display_key || item.key || item.mnemonic)} <button class="copy-btn" data-copy="${esc(item.display_key || item.key || item.mnemonic)}" title="Copy name">&#x2398;</button></h2>
-      <div class="detail-sub">${esc(d.display_form || item.display_form || d.form || item.form || item.display_mnemonic || item.mnemonic)}</div>
+      <h2>${esc(item.display_key || item.key || item.mnemonic)} ${copyBtns(item.display_key || item.key || item.mnemonic, d.display_form || item.display_form || d.form || item.form)}</h2>
+      <pre class="sig">${esc(d.display_form || item.display_form || d.form || item.form || item.display_mnemonic || item.mnemonic)}</pre>
       <div class="chips">
         ${((item.display_isa_tokens || item.isa || [])).map(v => `<span class="chip">${esc(Array.isArray(v) ? displayIsa(v) : v)}</span>`).join("")}
         ${meta.cpl ? `<span class="chip">CPL ${esc(meta.cpl)}</span>` : ""}
       </div>
+      <div class="kv-links">
+        ${pdfRefs.map(ref => `<a class="kv-link" href="${esc(ref.url || "")}" target="_blank" rel="noreferrer">${esc(ref.label || ref.source_id || "PDF")}${ref.page_start ? ` p${esc(ref.page_start)}` : ""}</a>`).join("")}
+        ${meta.url ? kvLink("uops.info", canonUrl(meta.url)) : ""}
+        ${meta["url-ref"] ? kvLink("Reference", canonUrl(meta["url-ref"])) : ""}
+      </div>
+      ${perfSummary(measurements)}
     </div>
     <section class="section">
       <h3>Summary</h3>
@@ -938,19 +1013,14 @@ function renderInstructionDetail(item, detail) {
         ${meta.category ? kvChip("Category", meta.category) : ""}
         ${meta.cpl ? kvChip("CPL", meta.cpl) : ""}
       </div>
-      <div class="kv-links">
-        ${meta.url ? kvLink("uops.info", canonUrl(meta.url)) : ""}
-        ${meta["url-ref"] ? kvLink("Reference", canonUrl(meta["url-ref"])) : ""}
-        ${pdfRefs.map(ref => `<a class="kv-link" href="${esc(ref.url || "")}" target="_blank" rel="noreferrer">${esc(ref.label || ref.source_id || "PDF")}${ref.page_start ? ` p${esc(ref.page_start)}` : ""}</a>`).join("")}
-      </div>
     </section>
+    ${measurements.length ? `<section class="section" id="perf-sec">
+      <h3>Performance</h3>
+      ${renderMeasurements(measurements)}
+    </section>` : ""}
     ${operands.length ? `<section class="section">
       <h3>Operands</h3>
       ${renderTable(operandHeaders, operands)}
-    </section>` : ""}
-    ${measurements.length ? `<section class="section">
-      <h3>Performance</h3>
-      ${renderMeasurements(measurements)}
     </section>` : ""}
     <section class="section">
       <h3>Intrinsics</h3>
@@ -973,13 +1043,21 @@ function renderInstructionDetail(item, detail) {
 /* ── Detail view ──────────────────────────────────────────────────── */
 async function renderDetail(entry) {
   activeKey = entry.key;
-  detailEmpty.style.display = "none";
 
   // Highlight in results
   for (const n of resultsNode.querySelectorAll(".result")) {
     n.classList.toggle("active", n.dataset.key === entry.key);
   }
-  location.hash = encodeURIComponent(entry.key);
+  // Remember the hash this render writes so hashchange can tell it apart
+  // from an external hash (deep link, back/forward) and not switch the
+  // mobile view for our own write. No marker when the hash is unchanged:
+  // no hashchange event fires for it and the marker would go stale.
+  const nextHash = "#" + encodeURIComponent(entry.key);
+  appWrittenHashes.add(nextHash);
+  if (location.hash !== nextHash) {
+    appWrittenHash = nextHash;
+    location.hash = encodeURIComponent(entry.key);
+  }
 
   if (entry.kind === "intrinsic") {
     // Load primary instruction detail for operands/measurements
@@ -1010,71 +1088,40 @@ async function renderDetail(entry) {
       detail._operands = [];
       detail._pdfRefs = [];
     }
-    detailNode.innerHTML = renderIntrinsicDetail(entry.item, detail);
+    _c3bar(); detailNode.innerHTML = renderIntrinsicDetail(entry.item, detail);
   } else {
     // Load instruction detail chunk
     const prefix = chunkPrefix(entry.item.mnemonic);
     const chunk = await loadChunk(prefix);
     const detail = chunk[entry.item.key] || null;
-    detailNode.innerHTML = renderInstructionDetail(entry.item, detail);
+    _c3bar(); detailNode.innerHTML = renderInstructionDetail(entry.item, detail);
   }
 
-}
-
-/* ── Category Filters ─────────────────────────────────────────────── */
-
-function updateCategorySummary() {
-  if (!categorySummary) return;
-  if (enabledCategories === null) {
-    categorySummary.textContent = "Category: All";
-    return;
-  }
-  const n = enabledCategories.size;
-  if (n === 0) { categorySummary.textContent = "Category: None"; return; }
-  if (n <= 2) {
-    categorySummary.textContent = "Category: " + [...enabledCategories].map(c => c || "(none)").join(", ");
-    return;
-  }
-  categorySummary.textContent = `Category: ${n} selected`;
-}
-
-function renderCategoryFilters() {
-  if (!categoryChips) return;
-  // De-duplicate categories across families (same name, aggregate count).
-  const bucket = new Map();
-  for (const spec of availableCategories) {
-    const cat = spec.category || "";
-    const prev = bucket.get(cat) || { category: cat, count: 0, families: new Set() };
-    prev.count += spec.count || 0;
-    if (spec.family) prev.families.add(spec.family);
-    bucket.set(cat, prev);
-  }
-  const entries = [...bucket.values()].sort((a, b) => b.count - a.count);
-  categoryChips.innerHTML = entries.map(entry => {
-    const active = enabledCategories === null || enabledCategories.has(entry.category);
-    const label = entry.category || "(uncategorised)";
-    return `<label class="isa-chip ${active ? "active" : ""}" title="${esc([...entry.families].join(", "))}">
-      <input type="checkbox" data-category="${esc(entry.category)}" ${active ? "checked" : ""}>
-      ${esc(label)}
-      <span class="chip-count">${entry.count}</span>
-    </label>`;
-  }).join("");
-
-  for (const cb of categoryChips.querySelectorAll("input[data-category]")) {
-    cb.addEventListener("change", () => {
-      const cat = cb.dataset.category;
-      if (enabledCategories === null) {
-        // First interaction: switch from "all" to an explicit set.
-        enabledCategories = new Set(entries.map(e => e.category));
-      }
-      if (cb.checked) enabledCategories.add(cat); else enabledCategories.delete(cat);
-      visibleSet = null;
-      scheduleFilterRender();
-    });
-  }
 }
 
 /* ── ISA Filters ──────────────────────────────────────────────────── */
+
+/* Empty-query behaviour: with all filters at their defaults the start
+   page shows the examples and no result list; once the user changes any
+   filter (ISA, kind, perf source) an empty query browses the filtered
+   set exactly like origin/main. "Changed" is state differing from the
+   post-bootstrap snapshot; perf kinds default to ["measured","modeled"]
+   regardless of the localStorage value. */
+let _filterSnapshot = null;
+function _snapshotFilters(perfKinds) {
+  return JSON.stringify([
+    enableAllIsas,
+    [...enabledIsas].sort(),
+    [...enabledSubIsas].map(([k, v]) => [k, [...v].sort()]).sort(),
+    enabledArmArch === null ? null : [...enabledArmArch].sort(),
+    [...enabledKinds].sort(),
+    (perfKinds || [...enabledPerfKinds]).sort(),
+  ]);
+}
+function filtersModifiedByUser() {
+  return _filterSnapshot !== null
+    && _snapshotFilters() !== _filterSnapshot;
+}
 
 function updateIsaSummary() {
   if (enableAllIsas) { isaSummary.textContent = "ISA: All"; return; }
@@ -1200,22 +1247,52 @@ function scheduleFilterRender() {
     filterRenderScheduled = false;
     rebuildVisibleSet();
     if (typeof updateIsaSummary === "function") updateIsaSummary();
-    if (typeof updateCategorySummary === "function") updateCategorySummary();
     renderIsaFilters();
-    if (typeof renderCategoryFilters === "function") renderCategoryFilters();
     renderResults();
   });
 }
+
+const _EX = () => `<div class="detail-empty" id="detail-empty" style="padding:2rem">
+  <p>Try: <a href="#" data-q="_mm_add_ps">_mm_add_ps</a> · <a href="#" data-q="vaddq_f32">vaddq_f32</a> · <a href="#" data-q="gather">gather</a></p>
+  <p style="margin-top:.8rem">Keys: <kbd>/</kbd> search · <kbd>j</kbd> <kbd>k</kbd> move · <kbd>c</kbd> copy</p>
+  <p class="meta-line" style="margin-top:1.2rem;font-size:.78rem;color:var(--text-muted)">build ${esc(metaNode.dataset.stamp || "")} · <a href="https://github.com/simd-labs/simdref" target="_blank" rel="noreferrer">GitHub</a> · <a href="https://pypi.org/project/simdref/" target="_blank" rel="noreferrer">PyPI</a></p></div>`;
+detailNode.addEventListener("click", (e) => {
+  const q = e.target.closest("a[data-q]");
+  if (!q) return;
+  e.preventDefault();
+  queryInput.value = q.dataset.q;
+  scheduleRender();
+});
+
+/* E1: results-or-detail, one at a time (mobile). The static #back-results
+ * button lives outside #detail so the async detail render cannot remove it.
+ * data-mobile-view="detail" is set only here: on a result-row click/tap and
+ * at page load when the URL already carries a hash (deep link). */
+const _mq768 = matchMedia("(max-width: 768px)");
+document.getElementById("back-results")?.addEventListener("click", (ev) => {
+  ev.preventDefault(); ev.stopPropagation();
+  delete document.body.dataset.mobileView;
+});
+_mq768.addEventListener("change", () => { delete document.body.dataset.mobileView; });
+document.addEventListener("click", (e) => {
+  if (!_mq768.matches) return;
+  if (!e.target.closest("#results .result")) return;
+  document.body.dataset.mobileView = "detail";
+});
+if (_mq768.matches && location.hash) document.body.dataset.mobileView = "detail";
 
 function renderResults() {
   const query = queryInput.value.trim();
   if (!catalog) return;
   if (visibleSet === null) rebuildVisibleSet();
-  const visible = searchEntries.filter((_, i) => visibleSet.has(i));
-
-  if (!query) {
-    resultPool = visible;
+  if (!query && !filtersModifiedByUser()) {
+    // Plain start page: examples, no persistent full-array pool.
+    resultPool = [];
+  } else if (!query) {
+    // Empty query, user-touched filters: browse the visible set like main.
+    resultPool = searchEntries.filter((_, i) => visibleSet.has(i));
   } else {
+    const visible = searchEntries.filter((_, i) => visibleSet.has(i));
     const cids = candidateIndexes(query);
     const pool = cids == null ? visible : cids.filter(i => visibleSet.has(i)).map(i => searchEntries[i]);
     resultPool = pool
@@ -1234,20 +1311,29 @@ function renderResults() {
   renderedCount = 0;
   virtualRange = { start: -1, end: -1 };
   resultsNode.scrollTop = 0;
-  syncResultsCount(query);
   renderVisibleResults(true);
+  syncResultsCount(query);
   prefetchIntrinsicChunks(resultPool.slice(0, 16));
 
-  // Auto-select
-  const fromHash = decodeURIComponent(location.hash.replace(/^#/, ""));
+  // Auto-select. A hash the app wrote itself (auto-selection, row click)
+  // is not a deep link: on the plain start page it gets dropped instead
+  // of re-selecting its entry. A hash the user opened (page load, pasted
+  // link, back/forward) still selects.
+  let fromHash = decodeURIComponent(location.hash.replace(/^#/, ""));
+  if (!query && !filtersModifiedByUser() && fromHash && appWrittenHashes.has(location.hash)) {
+    history.replaceState(null, "", location.pathname + location.search);
+    appWrittenHashes.delete(location.hash);
+    appWrittenHash = null;
+    activeKey = null;
+    fromHash = "";
+  }
   const selected = resultPool.find(e => e.key === activeKey)
     || resultPool.find(e => e.key === fromHash)
+    || (!query && _hashEntry(fromHash))
     || resultPool[0];
   if (selected) renderDetail(selected);
   else {
-    detailNode.innerHTML = "";
-    detailEmpty.style.display = "";
-    detailEmpty.textContent = query ? `No results for "${query}".` : "Select a result or search for an intrinsic / instruction.";
+    detailNode.innerHTML = query ? `<div class="detail-empty">No results for "${esc(query)}".</div>` : _EX();
   }
 }
 
@@ -1374,7 +1460,6 @@ document.addEventListener("keydown", (e) => {
 
   // f: toggle ISA filter
   if (e.key === "f") { isaPanel.classList.toggle("hidden"); return; }
-  if (e.key === "g") { categoryPanel.classList.toggle("hidden"); return; }
 
   if (e.shiftKey && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
     e.preventDefault();
@@ -1518,24 +1603,21 @@ for (const cb of document.querySelectorAll('#kind-bar input[data-kind]')) {
   });
 }
 
-/* ── Category panel toggle + presets ──────────────────────────────── */
-if ($("category-toggle")) {
-  $("category-toggle").addEventListener("click", () => categoryPanel.classList.toggle("hidden"));
-}
-if ($("category-all")) {
-  $("category-all").addEventListener("click", () => {
-    enabledCategories = null;
-    visibleSet = null;
-    scheduleFilterRender();
+/* Perf-source filter — measured vs modeled. Same live-update path as the
+   kind filter; the choice persists across reloads. */
+for (const cb of document.querySelectorAll('#kind-bar input[data-perf-kind]')) {
+  cb.checked = enabledPerfKinds.has(cb.dataset.perfKind);
+  cb.parentElement.classList.toggle("active", cb.checked);
+  cb.addEventListener("change", () => {
+    const kind = cb.dataset.perfKind;
+    if (cb.checked) enabledPerfKinds.add(kind); else enabledPerfKinds.delete(kind);
+    persistPerfKinds();
+    cb.parentElement.classList.toggle("active", cb.checked);
+    const active = resultPool.find(e => e.key === activeKey) || _hashEntry(decodeURIComponent(location.hash.replace(/^#/, "")));
+    if (active) renderDetail(active);
   });
 }
-if ($("category-none")) {
-  $("category-none").addEventListener("click", () => {
-    enabledCategories = new Set();
-    visibleSet = null;
-    scheduleFilterRender();
-  });
-}
+
 $("close-shortcuts").addEventListener("click", () => shortcutsOverlay.classList.add("hidden"));
 themeToggle.addEventListener("click", toggleTheme);
 queryInput.addEventListener("input", scheduleRender);
@@ -1580,6 +1662,8 @@ queryInput.addEventListener("keydown", (e) => {
 
 /* ── Hash navigation ──────────────────────────────────────────────── */
 let intrinsicsReady = null;  // resolved by Phase-2 bootstrap
+let appWrittenHash = null;   // last hash renderDetail wrote itself
+const appWrittenHashes = new Set();  // every hash renderDetail has written
 
 function _hashEntry(key) {
   if (!catalog || !key) return null;
@@ -1589,8 +1673,14 @@ function _hashEntry(key) {
 }
 
 window.addEventListener("hashchange", () => {
+  // A hash renderDetail wrote on auto-selection/row click: not a user
+  // navigation; never switch the mobile view for it.
+  if (appWrittenHash !== null && location.hash === appWrittenHash) { appWrittenHash = null; return; }
   const key = decodeURIComponent(location.hash.replace(/^#/, ""));
-  if (!catalog || !key) return;
+  if (!catalog) return;
+  // An emptied hash (back to the plain URL) returns mobile to the list.
+  if (!key) { delete document.body.dataset.mobileView; return; }
+  if (_mq768.matches) document.body.dataset.mobileView = "detail";
   let entry = _hashEntry(key);
   if (entry) { renderDetail(entry); return; }
   // Hash may name an intrinsic that Phase 2 hasn't ingested yet.
@@ -1620,10 +1710,9 @@ function showLoadError(message) {
   console.error("simdref:", message);
   if (metaNode) metaNode.textContent = "catalog load failed";
   if (resultsCount) resultsCount.textContent = "Failed to load search index";
-  if (detailEmpty) {
-    detailEmpty.textContent = message;
-    detailEmpty.style.display = "";
-  }
+  // #detail-empty is detached once renderDetail writes innerHTML; the load
+  // error must land in the live detail panel instead.
+  detailNode.innerHTML = `<div class="detail-empty" id="detail-empty">${esc(message)}</div>`;
   window.__loadError = true;
 }
 
@@ -1655,7 +1744,6 @@ Promise.all([
     FAMILY_SUB_ORDER = config.family_sub_order || {};
     DEFAULT_SUBS = Object.fromEntries(Object.entries(config.default_subs || {}).map(([family, values]) => [family, new Set(values)]));
     isaFamilyOrder = config.family_order || {};
-    availableCategories = Array.isArray(config.categories) ? config.categories : [];
     ARCH_PRESETS = config.presets && typeof config.presets === "object" ? config.presets : {};
     if (stamp && metaNode) {
       const stale = stamp.catalog_generated_at && data.generated_at && stamp.catalog_generated_at !== data.generated_at;
@@ -1688,8 +1776,6 @@ Promise.all([
     initEnabledSubIsas();
 
     renderIsaFilters();
-    renderCategoryFilters();
-    updateCategorySummary();
 
     // Preset selection precedence:
     //   1. ?preset=NAME URL param (always wins — shareable link)
@@ -1705,6 +1791,10 @@ Promise.all([
                       : (ARCH_PRESETS["intel"] ? "intel" : null);
       if (candidate) applyIsaPreset(candidate);
     } catch (_) { /* ignore malformed URL */ }
+
+    // Empty-query behaviour pins against this state. Perf kinds count as
+    // default ["measured","modeled"] even if localStorage narrows them.
+    _filterSnapshot = _snapshotFilters(["measured", "modeled"]);
 
     rebuildVisibleSet();
 
@@ -1750,9 +1840,10 @@ function _ingestIntrinsics(metaNode) {
   }
 
   return _intrinsicsFetch.then(intrinsics => new Promise(resolve => {
+    const done = () => { document.body.dataset.phase2 = "done"; resolve(); };
     if (!Array.isArray(intrinsics) || !intrinsics.length) {
       if (badge && badge.parentNode) badge.parentNode.removeChild(badge);
-      resolve();
+      done();
       return;
     }
     catalog.intrinsics = intrinsics;
@@ -1795,7 +1886,7 @@ function _ingestIntrinsics(metaNode) {
           metaNode.textContent = `${total} intrinsics · ${(catalog.instructions || []).length} instructions`;
         }
         renderResults();
-        resolve();
+        done();
       }
     };
     schedule(pump);

@@ -65,6 +65,7 @@ def _serve(directory: Path, port: int):
         yield
     finally:
         httpd.shutdown()
+        httpd.server_close()
         thread.join(timeout=2)
 
 
@@ -126,15 +127,11 @@ def _wait_intrinsics_loaded(page) -> None:
     """Block until Phase-2 ingest has folded every intrinsic into the
     search index and buckets, not just fetched the shard.
 
-    ``intrinsicsReady`` is the promise ``_ingestIntrinsics`` returns; it
-    resolves only once every entry is pushed into searchEntries/buckets.
-    Wait on it directly rather than the transient ``.meta-loading`` badge:
-    for this suite's tiny fixture catalog (2 intrinsics, one batch)
-    Phase 2 can attach and remove the badge within a single tick, faster
-    than DOM polling reliably observes either state.
+    Phase 2 sets ``document.body.dataset.phase2 = "done"`` when every
+    batch is in; wait on that.
     """
-    page.wait_for_function("() => intrinsicsReady !== null", timeout=15_000)
-    page.evaluate("() => intrinsicsReady")
+    page.wait_for_function(
+            "() => document.body.dataset.phase2 === 'done'", timeout=60_000)
 
 
 def test_search_add_with_only_intrinsics_returns_intrinsics(browser, page_url):

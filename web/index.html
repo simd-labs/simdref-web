@@ -40,10 +40,6 @@
       <span id="isa-summary">ISA: Default</span>
       <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 5l3 3 3-3"/></svg>
     </button>
-    <button id="category-toggle" class="isa-toggle-btn" type="button" title="Category filters (g)">
-      <span id="category-summary">Category: All</span>
-      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 5l3 3 3-3"/></svg>
-    </button>
   </div>
 
   <div id="isa-panel" class="isa-panel hidden">
@@ -71,16 +67,6 @@
     <label class="isa-chip active" title="Intel-modeled uops.info numbers used when no measured data exists for the mnemonic"><input type="checkbox" data-perf-kind="modeled" checked> modeled (Intel)</label>
   </div>
 
-  <div id="category-panel" class="isa-panel hidden">
-    <div class="isa-toolbar">
-      <div id="category-chips" class="isa-family-chips"></div>
-      <div class="isa-presets">
-        <button id="category-all" class="preset-btn" type="button">All</button>
-        <button id="category-none" class="preset-btn" type="button">None</button>
-      </div>
-    </div>
-  </div>
-
   <div class="layout">
     <aside class="results-panel" id="results-panel">
       <div class="results-header">
@@ -88,6 +74,9 @@
       </div>
       <div class="results-list" id="results" tabindex="0"></div>
     </aside>
+    <!-- Static mobile back control. It lives outside #detail so the async
+         detail render (detailNode.innerHTML = ...) can never remove it. -->
+    <button id="back-results" type="button">← results</button>
     <main class="detail-panel" id="detail" tabindex="0">
       <div class="detail-empty" id="detail-empty">Select a result or search for an intrinsic / instruction.</div>
     </main>
@@ -151,7 +140,6 @@
         <tr><td><kbd>c</kbd></td><td>Copy name to clipboard</td></tr>
         <tr><td><kbd>s</kbd></td><td>Toggle sidebar</td></tr>
         <tr><td><kbd>f</kbd></td><td>Toggle ISA filter</td></tr>
-        <tr><td><kbd>g</kbd></td><td>Toggle category filter</td></tr>
         <tr><td><kbd>d</kbd></td><td>Toggle dark mode</td></tr>
         <tr><td><kbd>?</kbd></td><td>Show shortcuts</td></tr>
       </table>

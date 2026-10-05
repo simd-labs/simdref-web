@@ -112,6 +112,7 @@ const sandbox = {
   document: documentStub,
   navigator: windowStub.navigator,
   location: windowStub.location,
+  matchMedia: windowStub.matchMedia,
   localStorage: {getItem: () => null, setItem: noop, removeItem: noop},
   // fetch hangs — bootstrap will register but never complete.
   fetch: () => new Promise(() => {}),
