@@ -8,15 +8,16 @@ covers the web half: serve this repo's static templates plus a
 
     scripts/gen-screenshots.py --site-data /path/to/site-data
 
-Images live on the ``docs-assets`` branch so ``main`` stays lightweight to
-clone. After running this script, commit the output there:
+Images live on the hidden ``refs/assets/docs`` ref so ``main`` stays
+lightweight to clone. After running this script, commit the output there:
 
-    git switch docs-assets              # or: git checkout --orphan docs-assets
+    git fetch origin refs/assets/docs
+    git switch --detach FETCH_HEAD
     mkdir -p img
     cp /tmp/simdref-web.png img/web.png
     git add img/web.png
     git commit -m "docs: refresh web screenshot"
-    git push origin docs-assets
+    git push origin HEAD:refs/assets/docs
     git switch -                        # back to your working branch
 """
 
