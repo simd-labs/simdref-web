@@ -2,9 +2,12 @@ name: Rebuild site
 
 # Pulls the `data-latest` release from the core simdref repo (published by
 # its ci.yml `publish-data` job), exports the JSON site-data bundle, and
-# deploys it next to this repo's static web/ files on GitHub Pages.
+# deploys it next to this repo's static web/ files on GitHub Pages. Runs on
+# every push to main, so a web/ change goes live without a manual dispatch.
 
 on:
+  push:
+    branches: [main]
   schedule:
     - cron: "0 6 * * 1" # weekly, 6h after core's Monday data-latest refresh
   workflow_dispatch:
