@@ -119,8 +119,15 @@ def render_web(site_data: Path) -> Path | None:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--site-data", type=Path, required=True, help="a `simdref export` site-data bundle directory")
+    ap = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    ap.add_argument(
+        "--site-data",
+        type=Path,
+        required=True,
+        help="a `simdref export` site-data bundle directory",
+    )
     args = ap.parse_args()
     web_path = render_web(args.site_data)
     if web_path:

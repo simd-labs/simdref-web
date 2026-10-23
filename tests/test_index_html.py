@@ -26,6 +26,7 @@ def test_index_html_has_kind_and_isa_panels():
     for element_id in REQUIRED_IDS:
         assert f'id="{element_id}"' in html, f"missing #{element_id} in {INDEX_HTML}"
 
+
 def test_index_html_has_no_category_filter():
     # A1: the Category filter can never match (no entry carries `category`),
     # so the panel, toggle and summary are gone from the shipped HTML.

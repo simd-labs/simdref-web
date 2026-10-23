@@ -32,7 +32,11 @@ STATIC_FILES = ("index.html", "app.js", "style.css", "favicon.svg", "logo.svg")
 
 # CI points this at a real `simdref export` output (see rebuild-site.yml) so a
 # core format change fails here instead of silently shipping a broken site.
-SITE_DATA = Path(os.environ["SIMDREF_WEB_SITE_DATA"]) if "SIMDREF_WEB_SITE_DATA" in os.environ else FIXTURE_SITE_DATA
+SITE_DATA = (
+    Path(os.environ["SIMDREF_WEB_SITE_DATA"])
+    if "SIMDREF_WEB_SITE_DATA" in os.environ
+    else FIXTURE_SITE_DATA
+)
 
 
 def _populate_site(out: Path) -> None:
@@ -130,8 +134,7 @@ def _wait_intrinsics_loaded(page) -> None:
     Phase 2 sets ``document.body.dataset.phase2 = "done"`` when every
     batch is in; wait on that.
     """
-    page.wait_for_function(
-            "() => document.body.dataset.phase2 === 'done'", timeout=60_000)
+    page.wait_for_function("() => document.body.dataset.phase2 === 'done'", timeout=60_000)
 
 
 def test_search_add_with_only_intrinsics_returns_intrinsics(browser, page_url):
