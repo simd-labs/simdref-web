@@ -840,6 +840,7 @@ function _c3apply() {
     const label = b.textContent.replace(/^\d /, "");
     const has = [...kinds.values()].includes(label);
     b.disabled = !has;
+    b.title = has ? "" : `No ${label.toLowerCase()} data for this entry`;
     b.setAttribute("aria-pressed", has && label === t ? "true" : "false");
   }
 }
