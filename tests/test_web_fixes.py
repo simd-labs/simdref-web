@@ -298,10 +298,17 @@ def test_default_tab_falls_back_when_no_perf(browser, site):
 
 
 @NEEDS_EXPORT
-def test_summary_metadata_visible_on_every_detail_tab(browser, site):
+@pytest.mark.parametrize(
+    ("query", "key", "tabs"),
+    [
+        ("vaddps (xmm, xmm, xmm)", "x86:vaddps (xmm, xmm, xmm)", 4),
+        ("_mm256_add_ps", "_mm256_add_ps", 4),
+    ],
+)
+def test_summary_metadata_visible_on_every_detail_tab(browser, site, query, key, tabs):
     """Summary and metadata stay above the detail tab bar. They must stay
-    visible on every detail tab. Subject: VADDPS has perf data, operands
-    and instruction semantics, so all four tabs are live."""
+    visible on every detail tab. Subjects: VADDPS (instruction path) and
+    _mm256_add_ps (intrinsic path); both render all four tabs."""
     _, url = site
     page = browser.new_page(viewport={"width": 1280, "height": 800})
     state = """
@@ -315,11 +322,12 @@ def test_summary_metadata_visible_on_every_detail_tab(browser, site):
             const chips = Array.from(document.querySelectorAll('#detail .kv-chip'))
                 .filter(c => vis(c) && /[A-Za-z0-9]/.test(c.innerText));
             const bar = document.querySelector('#detail .detail-tabs');
+            const srect = sum ? sum.getBoundingClientRect() : null;
             const above = sum && bar
-                ? sum.getBoundingClientRect().bottom <= bar.getBoundingClientRect().top + 1
+                ? srect.height > 0 && srect.bottom <= bar.getBoundingClientRect().top + 1
                 : false;
             return {
-                summary: vis(sum) && /Add Packed Single Precision/i.test(sum.innerText),
+                summary: vis(sum) && /Add Packed Single.?Precision/i.test(sum.innerText),
                 chipCount: chips.length,
                 above,
             };
@@ -327,11 +335,12 @@ def test_summary_metadata_visible_on_every_detail_tab(browser, site):
     """
     try:
         page.goto(url)
-        page.locator("#query").fill("vaddps (xmm, xmm, xmm)")
+        page.locator("#query").fill(query)
         page.wait_for_function("document.querySelectorAll('#results .result').length > 0")
         page.evaluate(
-            "Array.from(document.querySelectorAll('#results .result'))"
-            ".find(r => r.dataset.key === 'x86:vaddps (xmm, xmm, xmm)')?.click()"
+            "key => Array.from(document.querySelectorAll('#results .result'))"
+            ".find(r => r.dataset.key === key)?.click()",
+            key,
         )
         page.wait_for_function(
             "() => document.querySelector('#detail .detail-head')", timeout=15_000
@@ -343,7 +352,7 @@ def test_summary_metadata_visible_on_every_detail_tab(browser, site):
         first = page.evaluate(state)
         assert first["above"], "Summary must render above the detail tab bar"
         n = page.evaluate("document.querySelectorAll('#detail .detail-tabs button').length")
-        assert n == 4, n
+        assert n == tabs, n
         for i in range(n):
             label = page.evaluate(
                 f"document.querySelectorAll('#detail .detail-tabs button')[{i}].textContent"
@@ -353,6 +362,7 @@ def test_summary_metadata_visible_on_every_detail_tab(browser, site):
             r = page.evaluate(state)
             assert r["summary"], f"Summary not visible on tab {label!r}: {r}"
             assert r["chipCount"] >= 1, f"no metadata chip visible on tab {label!r}: {r}"
+            assert r["above"], f"Summary not above the tab bar on tab {label!r}: {r}"
     finally:
         page.close()
 

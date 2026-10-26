@@ -911,7 +911,7 @@ function renderIntrinsicDetail(item, detail) {
     <div class="detail-keep">
     <section class="section">
       <h3>Summary</h3>
-      <div>${esc(detail ? detail.description : item.description)}</div>
+      <div>${esc((detail ? detail.description : item.description) || "-")}</div>
     </section>
     <section class="section">
       <h3>Metadata</h3>
