@@ -1814,15 +1814,23 @@ Promise.all([
       metaNode.textContent = `${data.instructions.length} instructions`;
     }
 
-    const fromHash = decodeURIComponent(location.hash.replace(/^#/, ""));
     // An exact entry key is a deep link, not a search query: leave the box
     // empty so renderResults opens the entry instead of matching the key
     // as text and rendering "No results".
-    if (fromHash && !_hashEntry(fromHash)) queryInput.value = fromHash;
+    const fromHash = decodeURIComponent(location.hash.replace(/^#/, ""));
+    if (fromHash && !_hashEntry(fromHash)) {
+      // The hash can name an intrinsic Phase 2 has not ingested yet: hold
+      // the search fallback until the shard is in, then open the entry.
+      intrinsicsReady = _ingestIntrinsics(metaNode).then(() => {
+        if (decodeURIComponent(location.hash.replace(/^#/, "")) === fromHash && !queryInput.value) {
+          if (!_hashEntry(fromHash)) queryInput.value = fromHash;
+          renderResults();
+        }
+      });
+    } else {
+      intrinsicsReady = _ingestIntrinsics(metaNode);
+    }
     renderResults();
-
-    // Phase 2: fold intrinsics into the search index without blocking.
-    intrinsicsReady = _ingestIntrinsics(metaNode);
   })
   .catch((err) => {
     // Fetch failure (CORS, 404, gzip misconfig) should not leave "Loading..." up forever.

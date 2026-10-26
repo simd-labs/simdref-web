@@ -542,14 +542,22 @@ def test_number_keys_ignore_modifiers_and_inputs(browser, site):
 
 
 @NEEDS_EXPORT
-def test_deeplink_exact_key_opens_entry_not_no_results(browser, site):
+@pytest.mark.parametrize(
+    "key,expected",
+    [
+        ("x86:vaddps (xmm, xmm, m128)", "VADDPS"),
+        ("x86:imul (m16)", "IMUL"),
+        # Intrinsic keys land at bootstrap before Phase 2 ingests the shard.
+        ("__riscv_vsoxseg5ei16_v_i8mf8x5", "__riscv_vsoxseg5ei16_v_i8mf8x5"),
+    ],
+)
+def test_deeplink_exact_key_opens_entry_not_no_results(browser, site, key, expected):
     """A fresh page load with an exact entry key in the hash must open the
     detail entry, not treat the raw key as a search query and render
     "No results". Regression for x86:vaddps (xmm, xmm, m128)."""
     from urllib.parse import quote
 
     _, url = site
-    key = "x86:vaddps (xmm, xmm, m128)"
     page = browser.new_page(viewport={"width": 1280, "height": 800})
     try:
         page.goto(url + "#" + quote(key, safe=""))
@@ -558,10 +566,18 @@ def test_deeplink_exact_key_opens_entry_not_no_results(browser, site):
             " && !!document.querySelector('#detail .detail-head')",
             timeout=120_000,
         )
+        # Phase 2's done marker can beat the deferred deep-link render by a
+        # microtask; wait for the head to name this entry.
+        page.wait_for_function(
+            "(want) => (document.querySelector('#detail .detail-head')?.innerText || '')"
+            ".toUpperCase().includes(want)",
+            arg=expected.upper(),
+            timeout=120_000,
+        )
         head = page.evaluate(
             "() => (document.querySelector('#detail .detail-head')?.innerText || '').toUpperCase()"
         )
-        assert "VADDPS" in head, head
+        assert expected.upper() in head, head
         body = page.evaluate("() => document.body.innerText")
         assert "No results" not in body, body[:800]
     finally:
