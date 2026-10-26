@@ -829,7 +829,7 @@ function _c3secKind(sec) {
 function _c3apply() {
   const detail = document.getElementById("detail");
   if (!detail) return;
-  const secs = [...detail.querySelectorAll("section.section")].filter(s => !s.closest(".detail-head"));
+  const secs = [...detail.querySelectorAll("section.section")].filter(s => !s.closest(".detail-head") && !s.closest(".detail-keep"));
   const kinds = new Map(secs.map(s => [s, _c3secKind(s)]));
   let t = c3Tab;
   if (!t || ![...kinds.values()].includes(t)) {
@@ -862,8 +862,8 @@ function _c3bar() {
       b.onclick = () => _c3pick(label);
       bar.append(b);
     }
-    const head = detail.querySelector(".detail-head");
-    if (head) head.after(bar); else detail.prepend(bar);
+    const anchor = detail.querySelector(".detail-keep") || detail.querySelector(".detail-head");
+    if (anchor) anchor.after(bar); else detail.prepend(bar);
     _c3apply();
   }, 0);
 }
@@ -908,6 +908,7 @@ function renderIntrinsicDetail(item, detail) {
       </div>
       ${perfSummary(detail && detail._measurements)}
     </div>
+    <div class="detail-keep">
     <section class="section">
       <h3>Summary</h3>
       <div>${esc(detail ? detail.description : item.description)}</div>
@@ -929,6 +930,7 @@ function renderIntrinsicDetail(item, detail) {
         ${detail && detail.notes && detail.notes.length ? kvChip("Notes", detail.notes.join("; ")) : ""}
       </div>
     </section>
+    </div>
     ${hasMeasurements ? `<section class="section" id="perf-sec">
       <h3>Performance</h3>
       ${renderMeasurements(detail._measurements)}
@@ -1000,6 +1002,7 @@ function renderInstructionDetail(item, detail) {
       </div>
       ${perfSummary(measurements)}
     </div>
+    <div class="detail-keep">
     <section class="section">
       <h3>Summary</h3>
       <div>${esc(d.summary || item.summary || "-")}</div>
@@ -1015,6 +1018,7 @@ function renderInstructionDetail(item, detail) {
         ${meta.cpl ? kvChip("CPL", meta.cpl) : ""}
       </div>
     </section>
+    </div>
     ${measurements.length ? `<section class="section" id="perf-sec">
       <h3>Performance</h3>
       ${renderMeasurements(measurements)}

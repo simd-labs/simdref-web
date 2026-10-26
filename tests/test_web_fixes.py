@@ -297,6 +297,66 @@ def test_default_tab_falls_back_when_no_perf(browser, site):
         page.close()
 
 
+@NEEDS_EXPORT
+def test_summary_metadata_visible_on_every_detail_tab(browser, site):
+    """Summary and metadata stay above the detail tab bar. They must stay
+    visible on every detail tab. Subject: VADDPS has perf data, operands
+    and instruction semantics, so all four tabs are live."""
+    _, url = site
+    page = browser.new_page(viewport={"width": 1280, "height": 800})
+    state = """
+        (() => {
+            const sec = h => Array.from(document.querySelectorAll('#detail section.section'))
+                .find(s => s.querySelector('h3')?.textContent === h);
+            const vis = el => !!el && !el.closest('.detail-hidden')
+                && getComputedStyle(el).display !== 'none'
+                && el.getBoundingClientRect().height > 0;
+            const sum = sec('Summary');
+            const chips = Array.from(document.querySelectorAll('#detail .kv-chip'))
+                .filter(c => vis(c) && /[A-Za-z0-9]/.test(c.innerText));
+            const bar = document.querySelector('#detail .detail-tabs');
+            const above = sum && bar
+                ? sum.getBoundingClientRect().bottom <= bar.getBoundingClientRect().top + 1
+                : false;
+            return {
+                summary: vis(sum) && /Add Packed Single Precision/i.test(sum.innerText),
+                chipCount: chips.length,
+                above,
+            };
+        })()
+    """
+    try:
+        page.goto(url)
+        page.locator("#query").fill("vaddps (xmm, xmm, xmm)")
+        page.wait_for_function("document.querySelectorAll('#results .result').length > 0")
+        page.evaluate(
+            "Array.from(document.querySelectorAll('#results .result'))"
+            ".find(r => r.dataset.key === 'x86:vaddps (xmm, xmm, xmm)')?.click()"
+        )
+        page.wait_for_function(
+            "() => document.querySelector('#detail .detail-head')", timeout=15_000
+        )
+        page.wait_for_function(
+            "() => document.querySelector('#detail .detail-tabs')", timeout=15_000
+        )
+        _settled(page)
+        first = page.evaluate(state)
+        assert first["above"], "Summary must render above the detail tab bar"
+        n = page.evaluate("document.querySelectorAll('#detail .detail-tabs button').length")
+        assert n == 4, n
+        for i in range(n):
+            label = page.evaluate(
+                f"document.querySelectorAll('#detail .detail-tabs button')[{i}].textContent"
+            )
+            page.evaluate(f"document.querySelectorAll('#detail .detail-tabs button')[{i}].click()")
+            page.wait_for_timeout(150)
+            r = page.evaluate(state)
+            assert r["summary"], f"Summary not visible on tab {label!r}: {r}"
+            assert r["chipCount"] >= 1, f"no metadata chip visible on tab {label!r}: {r}"
+    finally:
+        page.close()
+
+
 def _set_perf_kinds(page, kinds):
     page.evaluate(
         """kinds => {
