@@ -1058,8 +1058,12 @@ async function renderDetail(entry) {
   // mobile view for our own write. No marker when the hash is unchanged:
   // no hashchange event fires for it and the marker would go stale.
   const nextHash = "#" + encodeURIComponent(entry.key);
-  appWrittenHashes.add(nextHash);
-  if (location.hash !== nextHash) {
+  // Compare decoded keys, not encoded strings: the loaded hash may percent-
+  // encode characters encodeURIComponent leaves bare (e.g. parens), so the
+  // raw strings can differ for the same key. Only an unchanged (user deep
+  // link) key is skipped; app navigations are marked and may be dropped.
+  if (decodeURIComponent(location.hash.replace(/^#/, "")) !== entry.key) {
+    appWrittenHashes.add(nextHash);
     appWrittenHash = nextHash;
     location.hash = encodeURIComponent(entry.key);
   }
@@ -1811,7 +1815,10 @@ Promise.all([
     }
 
     const fromHash = decodeURIComponent(location.hash.replace(/^#/, ""));
-    if (fromHash) queryInput.value = fromHash;
+    // An exact entry key is a deep link, not a search query: leave the box
+    // empty so renderResults opens the entry instead of matching the key
+    // as text and rendering "No results".
+    if (fromHash && !_hashEntry(fromHash)) queryInput.value = fromHash;
     renderResults();
 
     // Phase 2: fold intrinsics into the search index without blocking.

@@ -539,3 +539,30 @@ def test_number_keys_ignore_modifiers_and_inputs(browser, site):
         assert page.evaluate(tab_sel) == sel0
     finally:
         page.close()
+
+
+@NEEDS_EXPORT
+def test_deeplink_exact_key_opens_entry_not_no_results(browser, site):
+    """A fresh page load with an exact entry key in the hash must open the
+    detail entry, not treat the raw key as a search query and render
+    "No results". Regression for x86:vaddps (xmm, xmm, m128)."""
+    from urllib.parse import quote
+
+    _, url = site
+    key = "x86:vaddps (xmm, xmm, m128)"
+    page = browser.new_page(viewport={"width": 1280, "height": 800})
+    try:
+        page.goto(url + "#" + quote(key, safe=""))
+        page.wait_for_function(
+            "() => document.body.dataset.phase2 === 'done'"
+            " && !!document.querySelector('#detail .detail-head')",
+            timeout=120_000,
+        )
+        head = page.evaluate(
+            "() => (document.querySelector('#detail .detail-head')?.innerText || '').toUpperCase()"
+        )
+        assert "VADDPS" in head, head
+        body = page.evaluate("() => document.body.innerText")
+        assert "No results" not in body, body[:800]
+    finally:
+        page.close()
