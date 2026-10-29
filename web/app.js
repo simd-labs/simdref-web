@@ -1934,6 +1934,92 @@ function buildInstructionsByMnem() {
   }
 }
 
+/* ── Byte identity (encodings shard + wasm tools) ──────────────────────
+ * When the site data carries search-index-encodings.json (schema 14),
+ * the Annotate tab identifies lines from their encoded bytes instead of
+ * the regex/width matcher below: one llvm-mc (wasm) run per document,
+ * x86 bytes decoded through XED (wasm), Arm/RISC-V words matched
+ * against the shard's encoding patterns. identity.js holds the port of
+ * src/simdref/asm_identity.py; this side only loads the shard, talks to
+ * the worker and maps shard keys back to instruction entries. */
+const IDENTITY_ISAS = Object.freeze({
+  x86:   { arch: "x86", syntax: "att" },
+  arm:   { arch: "aarch64", syntax: "att" },  /* the Arm selector covers AArch64 assembly */
+  riscv: { arch: "riscv64", syntax: "att" },
+});
+
+let _encodingsShardPromise = null;
+function loadEncodingsShard() {
+  if (!_encodingsShardPromise) {
+    _encodingsShardPromise = fetchJson("search-index-encodings.json")
+      .then(rows => (Array.isArray(rows) && rows.length ? rows : null))
+      .catch(() => null);
+  }
+  return _encodingsShardPromise;
+}
+
+let _identityWorker = null;
+let _identityInitError = null;
+
+function _newIdentityWorker(rows) {
+  const worker = new Worker("identity.js", { type: "module" });
+  const state = { worker, seq: 0, pending: new Map(), ready: null };
+  state.ready = new Promise((resolve) => {
+    /* A script that fails to load (404, syntax error) fires onerror
+     * without posting a message: fall back instead of hanging. */
+    worker.onerror = (e) => {
+      _identityInitError = e.message || "identity.js failed to load";
+      resolve(false);
+    };
+    worker.onmessage = (e) => {
+      const m = e.data || {};
+      if (m.type === "ready") resolve(true);
+      else if (m.type === "init-failed") { _identityInitError = m.error || "init failed"; resolve(false); }
+      else if (m.type === "result" || m.type === "run-failed") {
+        const slot = state.pending.get(m.seq);
+        if (slot) { state.pending.delete(m.seq); slot(m); }
+      }
+    };
+    // __simdrefWasmBase: test suites point the worker at a fixture
+    // server instead of the release assets.
+    worker.postMessage({ type: "init", rows, base: globalThis.__simdrefWasmBase || "" });
+  });
+  return state;
+}
+
+/* The per-line identity of one document: an array of
+ * { n, status, key, reason } (1-based lines), or null when byte
+ * identity is unavailable (no shard, no Worker, tool init failed).
+ * Called by runAnnotate and by the identity tests. */
+async function resolveIdentityKeys(text, isa) {
+  const cfg = IDENTITY_ISAS[isa];
+  if (!cfg || typeof Worker === "undefined") return null;
+  const rows = await loadEncodingsShard();
+  if (!rows) return null;
+  if (!_identityWorker) _identityWorker = _newIdentityWorker(rows);
+  if (!(await _identityWorker.ready)) return null;
+  const seq = ++_identityWorker.seq;
+  const reply = await new Promise((resolve) => {
+    _identityWorker.pending.set(seq, resolve);
+    _identityWorker.worker.postMessage({ type: "identify", seq, text, arch: cfg.arch, syntax: cfg.syntax });
+  });
+  if (reply.type !== "result") {
+    _identityInitError = reply.error || "identify failed";
+    return null;
+  }
+  return reply.results;
+}
+
+const instructionsByKey = Object.create(null);
+let _byKeyBuilt = false;
+function buildInstructionsByKey() {
+  if (_byKeyBuilt) return;
+  for (const entry of (catalog.instructions || [])) {
+    if (entry && entry.key) instructionsByKey[entry.key] = entry;
+  }
+  _byKeyBuilt = true;
+}
+
 function _archOf(entry) {
   return String(entry.architecture || "").toLowerCase();
 }
@@ -2308,11 +2394,38 @@ async function runAnnotate() {
 
   const isa = $("ann-isa").value || "";
 
+  /* Byte identity: one llvm-mc run per document when the encodings
+   * shard is there. Per line, identityByLine holds the instruction
+   * entry for the shard key (or null for no-row lines). */
+  let identityByLine = null;
+  let identityNote = "";
+  if (IDENTITY_ISAS[isa]) {
+    const identityResults = await resolveIdentityKeys(input, isa);
+    if (identityResults) {
+      buildInstructionsByKey();
+      identityByLine = new Map();
+      for (const r of identityResults) {
+        identityByLine.set(r.n, r.key ? instructionsByKey[r.key] || null : null);
+      }
+    } else if (_identityInitError) {
+      identityNote = `; byte identity unavailable (${_identityInitError})`;
+    }
+  }
+
   // Dedup prefix fetches up-front.
   const prefixes = new Set();
-  for (const m of mnems) {
-    const forms = lookupForms(m, isa);
-    for (const f of forms) prefixes.add(chunkPrefix(f.mnemonic));
+  if (identityByLine) {
+    for (const entry of identityByLine.values()) {
+      if (entry) prefixes.add(chunkPrefix(entry.mnemonic));
+    }
+  } else {
+    /* shortcut: the regex/width matcher below stays as the fallback
+     * until the data release ships search-index-encodings.json on
+     * data-latest; the "any" ISA choice needs it even then. */
+    for (const m of mnems) {
+      const forms = lookupForms(m, isa);
+      for (const f of forms) prefixes.add(chunkPrefix(f.mnemonic));
+    }
   }
   status.textContent = `fetching ${prefixes.size} chunk${prefixes.size === 1 ? "" : "s"}…`;
   await Promise.all([...prefixes].map(p => loadChunk(p)));
@@ -2329,14 +2442,21 @@ async function runAnnotate() {
   const opts = readAnnotateOpts();
   let known = 0, unknown = 0;
   const outLines = [];
+  let lineNo = 0;
   for (const p of parsed) {
+    lineNo++;
     if (p.kind !== "instruction") {
       outLines.push(highlightAsm(p.raw, isa));
       continue;
     }
-    const forms = lookupForms(p.mnemonic, isa);
-    const opTokens = isa === "x86" ? _operandWidthTokens(p.operands) : [];
-    const form = forms.length ? pickForm(forms, opts.arch, measurementsByKey, opTokens) : null;
+    let form = null;
+    if (identityByLine) {
+      form = identityByLine.get(lineNo) || null;
+    } else {
+      const forms = lookupForms(p.mnemonic, isa);
+      const opTokens = isa === "x86" ? _operandWidthTokens(p.operands) : [];
+      form = forms.length ? pickForm(forms, opts.arch, measurementsByKey, opTokens) : null;
+    }
     if (!form) {
       unknown++;
       outLines.push(`${highlightAsm(p.raw, isa)}   <span class="hl-unknown">${p.trailing ? "" : "# ??"}</span>`);
@@ -2356,7 +2476,7 @@ async function runAnnotate() {
     outLines.push(`${highlightAsm(p.raw, isa)}   <span class="hl-comment"># ${escAnn(annotation)}</span>`);
   }
   out.innerHTML = outLines.join("\n");
-  status.textContent = `annotated ${known} / ${known + unknown} (${unknown} unknown)`;
+  status.textContent = `annotated ${known} / ${known + unknown} (${unknown} unknown)${identityNote}`;
 }
 
 function outputAsText() {

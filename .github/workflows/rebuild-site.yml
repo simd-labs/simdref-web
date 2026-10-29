@@ -55,7 +55,7 @@ jobs:
         run: simdref export --out-dir _site
 
       - name: Assemble static files
-        run: cp web/index.html web/app.js web/style.css web/favicon.svg web/logo.svg _site/
+        run: cp web/index.html web/app.js web/identity.js web/style.css web/favicon.svg web/logo.svg _site/
 
       - name: Test against the real export
         # The e2e suite normally runs against the committed fixture; here it
