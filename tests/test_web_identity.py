@@ -397,6 +397,31 @@ def test_form_feed_keeps_the_line_map(browser, tmp_path):
 
 
 @requires_fixtures
+def test_print_pollution_keeps_16bit_mode_no_row(browser, tmp_path):
+    """Sol's .print defect (the Python reference fix, same mechanism):
+    .print text on stdout must never flip the mode. Here .code16 set
+    16-bit mode and '.print ".code64"' only looks like a mode flag;
+    LLVM encodes movw as MOV16rr (89 c3), so it gets no row, never
+    x86:mov (r32, r32)."""
+    document = ".code16\n" + "nop\n" * 1500 + '.print ""\n.print ".code64"\nmovw %ax, %bx'
+    actual = _identify_doc(browser, tmp_path, document)
+    assert actual is not None and len(actual) == 1504, actual
+    assert actual[0]["status"] == "not-an-instruction", actual[:3]
+    assert actual[1]["status"] == "no-row" and "16-bit mode" in actual[1]["reason"], actual[1]
+    assert actual[-1]["status"] == "no-row" and "16-bit mode" in actual[-1]["reason"], actual[-1]
+
+
+@requires_fixtures
+def test_print_pollution_keeps_64bit_row(browser, tmp_path):
+    """The counterpart: in 64-bit mode '.print ".code16"' must not
+    decline a following 64-bit instruction."""
+    actual = _identify_doc(browser, tmp_path, '.print ".code16"\nmovl %eax, %ebx')
+    assert actual is not None and len(actual) == 2, actual
+    assert actual[0]["status"] == "not-an-instruction", actual
+    assert actual[1]["status"] == "row" and actual[1]["key"] == "x86:mov (r32, r32)", actual
+
+
+@requires_fixtures
 def test_worker_death_before_ready_settles(browser, tmp_path):
     """Sol CHECK2-init-death probe, verbatim worker body: a worker that
     closes before posting ready must not hang Annotate. The deadline

@@ -278,15 +278,28 @@ async function ensureMc(tools) {
 }
 
 /* One fresh Module instance per run: re-running callMain on one
- * instance accumulates llvm-mc's cl:: positional inputs across runs.
- * The document rides stdin (no input file), so error lines name
- * <stdin> exactly like the native pipeline. */
+ * instance accumulates llvm-mc's cl:: positional inputs across runs,
+ * and a fresh module carries a fresh in-memory filesystem. The
+ * document rides stdin (no input file), so error lines name
+ * <stdin> exactly like the native pipeline.
+ *
+ * .print text goes to stdout, where the mode-flag and line-marker
+ * text also lands, so captured stdout is poisonable and never
+ * parsed: the assembly output goes through -o to a file in the
+ * module's own filesystem, and only that output is parsed.
+ *
+ * The output cannot be a plain file: on any assembly error llvm-mc's
+ * ToolOutputFile cleanup deletes it and the lines that did assemble
+ * lose their bytes (the old stdout path kept them). A character
+ * device survives: the cleanup unlinks the node, but the written
+ * bytes already landed in the JS chunk list. */
+const MC_OUT = "/simdref-mc.out";
+
 async function runMc(tools, args, text) {
   const { factory, compiled } = await ensureMc(tools);
-  const outLines = [];
   const errLines = [];
-  const out = byteSink(outLines);
   const err = byteSink(errLines);
+  const outChunks = [];
   let pos = 0;
   let readyResolve, readyReject;
   const ready = new Promise((res, rej) => { readyResolve = res; readyReject = rej; });
@@ -295,7 +308,7 @@ async function runMc(tools, args, text) {
     onRuntimeInitialized: () => readyResolve(),
     onAbort: (what) => readyReject(new Error(`llvm-mc aborted: ${what}`)),
     stdin() { return pos < text.length ? text.charCodeAt(pos++) : null; },
-    stdout: out.sink,
+    stdout: () => {},
     stderr: err.sink,
     print: () => {},
     printErr: () => {},
@@ -305,12 +318,16 @@ async function runMc(tools, args, text) {
   });
   const module = await promise;
   await ready;
+  module.FS.createDevice("/", "simdref-mc.out", null, (code) => outChunks.push(code));
   /* callMain unshifts thisProgram into the array; hand over a copy so
    * the caller's args survive the next pass unchanged. */
-  const exit = module.callMain([...args]);
-  out.flush();
+  const exit = module.callMain([...args, "-o", MC_OUT]);
   err.flush();
-  return { exit, stdout: outLines.join("\n"), stderr: errLines.join("\n") };
+  return {
+    exit,
+    text: new TextDecoder().decode(Uint8Array.from(outChunks)),
+    stderr: errLines.join("\n"),
+  };
 }
 
 let xedTools = null; // { code, compiled }
@@ -496,7 +513,7 @@ async function probeLines(tools, lines, arch) {
     const m = ERR_RE.exec(line);
     if (m && !errors.has(Number(m[1]))) errors.set(Number(m[1]), m[3]);
   }
-  const blocks = parseEchoBlocks(run.stdout);
+  const blocks = parseEchoBlocks(run.text);
 
   const indexOf = new Map(markers.map((marker, i) => [marker, i + 1]));
   const seen = new Map();
