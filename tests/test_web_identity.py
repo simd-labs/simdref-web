@@ -6,19 +6,25 @@ llvm-mc / XED wasm builds (nothing is fetched from GitHub). Compared
 per line against the expected rows of the reference implementation
 (src/simdref/asm_identity.py, schema-14 catalog).
 
-The fixture directory (documents, expected rows, shard, wasm builds) is
-pointed at through ``SIMDREF_WEB_IDENTITY_DIR``; the tests skip when it
-is unset, so minimal CI images stay green. Layout::
+Fixtures (documents, expected rows, the shard gzipped) are committed
+under ``tests/fixtures/identity``; ``SIMDREF_WEB_IDENTITY_DIR`` can
+point at another directory with the same layout. The llvm-mc / XED wasm
+builds come from the visualizer ``wasm-v1`` release, pointed at through
+``SIMDREF_WEB_IDENTITY_WASM``; the tests skip when it is unset, so a
+local run without the release download stays green. Layout::
 
-    doc-att.s / expected-att.json   AT&T x86 corpus document + rows
-    doc-a64.s / expected-a64.json   AArch64 corpus document + rows
-    search-index-encodings.json     the real export shard
-    wasm/       hash-matching llvm-mc/xedform builds
-    wasm-bad/   the same, with one byte of llvm-mc.wasm flipped
+    doc-att.s / expected-att.json       AT&T x86 corpus document + rows
+    doc-a64.s / expected-a64.json       AArch64 corpus document + rows
+    doc-riscv.s / expected-riscv.json   RISC-V corpus document + rows
+    search-index-encodings.json.gz      the real export shard, gzipped
+
+The wasm-bad variant (one byte of llvm-mc.wasm flipped) is built in
+``tmp_path`` from the release files.
 """
 
 from __future__ import annotations
 
+import gzip
 import json
 import os
 import shutil
@@ -32,25 +38,47 @@ from playwright.sync_api import sync_playwright  # noqa: E402
 from test_web_e2e import _free_port, _populate_site, _serve  # noqa: E402
 
 REPO_ROOT = Path(__file__).parent.parent
-IDIR = (
-    Path(os.environ["SIMDREF_WEB_IDENTITY_DIR"])
-    if "SIMDREF_WEB_IDENTITY_DIR" in os.environ
-    else None
-)
+FIXTURE_DIR = Path(__file__).parent / "fixtures" / "identity"
+IDIR = Path(os.environ.get("SIMDREF_WEB_IDENTITY_DIR", FIXTURE_DIR))
+WASM_DIR = os.environ.get("SIMDREF_WEB_IDENTITY_WASM")
 
-requires_fixtures = pytest.mark.skipif(IDIR is None, reason="SIMDREF_WEB_IDENTITY_DIR not set")
+requires_fixtures = pytest.mark.skipif(
+    WASM_DIR is None,
+    reason="SIMDREF_WEB_IDENTITY_WASM unset (no wasm-v1 release download)",
+)
 
 WASM_FILES = ("llvm-mc.js", "llvm-mc.wasm", "xedform.cjs", "xedform.wasm")
 
 
-def _build_site(out: Path, wasm_source: Path) -> None:
+def _copy_shard(out: Path) -> None:
+    shard = IDIR / "search-index-encodings.json"
+    if shard.exists():
+        shutil.copy(shard, out / "search-index-encodings.json")
+    else:
+        with gzip.open(IDIR / "search-index-encodings.json.gz", "rb") as f:
+            (out / "search-index-encodings.json").write_bytes(f.read())
+
+
+def _build_site(out: Path, wasm_source: Path | str | None = None) -> None:
     _populate_site(out)
     shutil.copy(REPO_ROOT / "web" / "identity.js", out / "identity.js")
-    shutil.copy(IDIR / "search-index-encodings.json", out / "search-index-encodings.json")
+    _copy_shard(out)
     wasm_dir = out / "wasm-v1"
     wasm_dir.mkdir()
+    source = Path(wasm_source) if wasm_source is not None else Path(WASM_DIR)
     for name in WASM_FILES:
-        shutil.copy(wasm_source / name, wasm_dir / name)
+        shutil.copy(source / name, wasm_dir / name)
+
+
+def _bad_wasm(tmp_path: Path) -> Path:
+    """Copy the release wasm dir and flip one byte of llvm-mc.wasm."""
+    bad = tmp_path / "wasm-bad"
+    shutil.copytree(WASM_DIR, bad)
+    wasm = bad / "llvm-mc.wasm"
+    data = bytearray(wasm.read_bytes())
+    data[-1] ^= 0xFF
+    wasm.write_bytes(data)
+    return bad
 
 
 @pytest.fixture(scope="module")
@@ -76,7 +104,7 @@ def browser():
 def test_corpus_rows_match_asm_identity(browser, cls, isa, tmp_path):
     """Every corpus line gets the same catalog row as asm_identity."""
     site = tmp_path / "site"
-    _build_site(site, IDIR / "wasm")
+    _build_site(site)
     document = (IDIR / f"doc-{cls}.s").read_text().rstrip("\n")
     expected = json.loads((IDIR / f"expected-{cls}.json").read_text())
     port = _free_port()
@@ -118,7 +146,7 @@ def test_trailing_newline_keeps_identity(browser, tmp_path):
     splitlines() semantics); without that, the echo-lockstep count
     mismatches and every line ends unknown."""
     site = tmp_path / "site"
-    _build_site(site, IDIR / "wasm")
+    _build_site(site)
     expected = json.loads((IDIR / "expected-att.json").read_text())
     document = "\n".join(w["text"] for w in expected[:5]) + "\n"
     port = _free_port()
@@ -143,7 +171,7 @@ def test_crlf_and_form_feed_split_like_splitlines(browser, tmp_path):
     \r\n and a form feed split, so the per-line rows line up with the
     document the user sees."""
     site = tmp_path / "site"
-    _build_site(site, IDIR / "wasm")
+    _build_site(site)
     expected = json.loads((IDIR / "expected-att.json").read_text())
     texts = [expected[0]["text"], "\x0c", expected[1]["text"]]
     document = "\r\n".join(texts) + "\r\n"
@@ -169,7 +197,7 @@ def test_crlf_and_form_feed_split_like_splitlines(browser, tmp_path):
 def _identify_doc(browser, tmp_path, document, isa="x86"):
     """Run one document through the identity worker on the real site."""
     site = tmp_path / f"site{len(list(tmp_path.iterdir()))}"
-    _build_site(site, IDIR / "wasm")
+    _build_site(site)
     port = _free_port()
     with _serve(site, port):
         page = browser.new_page()
@@ -278,7 +306,7 @@ def test_missing_worker_script_falls_back(browser, tmp_path):
     """With the shard present but identity.js missing, runAnnotate must
     fall back to name matching instead of hanging on the worker."""
     site = tmp_path / "site"
-    _build_site(site, IDIR / "wasm")
+    _build_site(site)
     (site / "identity.js").unlink()
     port = _free_port()
     with _serve(site, port):
@@ -306,7 +334,7 @@ def test_sha256_mismatch_refuses_wasm(browser, tmp_path):
     """A corrupted llvm-mc.wasm fails the sha256 check, the wasm is never
     instantiated, and the tab falls back to name matching."""
     site = tmp_path / "site"
-    _build_site(site, IDIR / "wasm-bad")
+    _build_site(site, _bad_wasm(tmp_path))
     port = _free_port()
     with _serve(site, port):
         page = browser.new_page()
@@ -332,12 +360,13 @@ def test_sha256_mismatch_refuses_wasm(browser, tmp_path):
 
 @requires_fixtures
 def test_form_feed_keeps_the_line_map(browser, tmp_path):
-    """Sol CHECK2-integration probe, verbatim document: with a form feed
-    in it the page must split lines by the worker's rule, so the addl
-    and subq lines keep their own rows and the subq line never picks
-    the shifted addl row."""
+    """Sol CHECK2-integration probe, recast on the entries the committed
+    site-data fixture carries (ADDPS/VADDPS): with a form feed in the
+    document the page must split lines by the worker's rule, so the
+    second and third lines keep their own rows and the last line never
+    picks the shifted vaddps row."""
     site = tmp_path / "site"
-    _build_site(site, IDIR / "wasm")
+    _build_site(site)
     port = _free_port()
     with _serve(site, port):
         page = browser.new_page()
@@ -351,7 +380,7 @@ def test_form_feed_keeps_the_line_map(browser, tmp_path):
                     const original = formatAnnotation;
                     formatAnnotation = function (e, m, o) { keys.push(e.key); return original(e, m, o); };
                     try {
-                        document.querySelector('#ann-input').value = 'addq %rax, %rbx\\n\\x0caddl %eax, %ecx\\nsubq %rcx, %rdx\\n';
+                        document.querySelector('#ann-input').value = 'addps %xmm0, %xmm1\\n\\x0cvaddps %ymm0, %ymm1, %ymm2\\naddps %xmm4, %xmm5\\n';
                         document.querySelector('#ann-isa').value = 'x86';
                         await runAnnotate();
                         return keys;
@@ -360,7 +389,11 @@ def test_form_feed_keeps_the_line_map(browser, tmp_path):
             )
         finally:
             page.close()
-    assert keys == ["x86:add (r64, r64)", "x86:add (r32, r32)", "x86:sub (r64, r64)"], keys
+    assert keys == [
+        "x86:addps (xmm, xmm)",
+        "x86:vaddps (ymm, ymm, ymm)",
+        "x86:addps (xmm, xmm)",
+    ], keys
 
 
 @requires_fixtures
@@ -370,7 +403,7 @@ def test_worker_death_before_ready_settles(browser, tmp_path):
     from request start expires, the worker is terminated, and the old
     name matcher answers."""
     site = tmp_path / "site"
-    _build_site(site, IDIR / "wasm")
+    _build_site(site)
     port = _free_port()
     with _serve(site, port):
         context = browser.new_context()

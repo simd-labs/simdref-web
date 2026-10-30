@@ -1,0 +1,478 @@
+[
+ {
+  "n": 1,
+  "text": "add a0, a1, a2",
+  "status": "row",
+  "reason": "",
+  "key": "riscv:add"
+ },
+ {
+  "n": 2,
+  "text": "add t0, t1, t2",
+  "status": "row",
+  "reason": "",
+  "key": "riscv:add"
+ },
+ {
+  "n": 3,
+  "text": "add s0, s1, s2",
+  "status": "row",
+  "reason": "",
+  "key": "riscv:add"
+ },
+ {
+  "n": 4,
+  "text": "sub a0, a1, a2",
+  "status": "row",
+  "reason": "",
+  "key": "riscv:sub"
+ },
+ {
+  "n": 5,
+  "text": "sub t0, t1, t2",
+  "status": "row",
+  "reason": "",
+  "key": "riscv:sub"
+ },
+ {
+  "n": 6,
+  "text": "sub s0, s1, s2",
+  "status": "row",
+  "reason": "",
+  "key": "riscv:sub"
+ },
+ {
+  "n": 7,
+  "text": "and a0, a1, a2",
+  "status": "row",
+  "reason": "",
+  "key": "riscv:and"
+ },
+ {
+  "n": 8,
+  "text": "and t0, t1, t2",
+  "status": "row",
+  "reason": "",
+  "key": "riscv:and"
+ },
+ {
+  "n": 9,
+  "text": "and s0, s1, s2",
+  "status": "row",
+  "reason": "",
+  "key": "riscv:and"
+ },
+ {
+  "n": 10,
+  "text": "or a0, a1, a2",
+  "status": "row",
+  "reason": "",
+  "key": "riscv:or"
+ },
+ {
+  "n": 11,
+  "text": "or t0, t1, t2",
+  "status": "row",
+  "reason": "",
+  "key": "riscv:or"
+ },
+ {
+  "n": 12,
+  "text": "or s0, s1, s2",
+  "status": "row",
+  "reason": "",
+  "key": "riscv:or"
+ },
+ {
+  "n": 13,
+  "text": "xor a0, a1, a2",
+  "status": "row",
+  "reason": "",
+  "key": "riscv:xor"
+ },
+ {
+  "n": 14,
+  "text": "xor t0, t1, t2",
+  "status": "row",
+  "reason": "",
+  "key": "riscv:xor"
+ },
+ {
+  "n": 15,
+  "text": "xor s0, s1, s2",
+  "status": "row",
+  "reason": "",
+  "key": "riscv:xor"
+ },
+ {
+  "n": 16,
+  "text": "sll a0, a1, a2",
+  "status": "row",
+  "reason": "",
+  "key": "riscv:sll"
+ },
+ {
+  "n": 17,
+  "text": "sll t0, t1, t2",
+  "status": "row",
+  "reason": "",
+  "key": "riscv:sll"
+ },
+ {
+  "n": 18,
+  "text": "sll s0, s1, s2",
+  "status": "row",
+  "reason": "",
+  "key": "riscv:sll"
+ },
+ {
+  "n": 19,
+  "text": "srl a0, a1, a2",
+  "status": "row",
+  "reason": "",
+  "key": "riscv:srl"
+ },
+ {
+  "n": 20,
+  "text": "srl t0, t1, t2",
+  "status": "row",
+  "reason": "",
+  "key": "riscv:srl"
+ },
+ {
+  "n": 21,
+  "text": "srl s0, s1, s2",
+  "status": "row",
+  "reason": "",
+  "key": "riscv:srl"
+ },
+ {
+  "n": 22,
+  "text": "sra a0, a1, a2",
+  "status": "row",
+  "reason": "",
+  "key": "riscv:sra"
+ },
+ {
+  "n": 23,
+  "text": "sra t0, t1, t2",
+  "status": "row",
+  "reason": "",
+  "key": "riscv:sra"
+ },
+ {
+  "n": 24,
+  "text": "sra s0, s1, s2",
+  "status": "row",
+  "reason": "",
+  "key": "riscv:sra"
+ },
+ {
+  "n": 25,
+  "text": "slt a0, a1, a2",
+  "status": "row",
+  "reason": "",
+  "key": "riscv:slt"
+ },
+ {
+  "n": 26,
+  "text": "slt t0, t1, t2",
+  "status": "row",
+  "reason": "",
+  "key": "riscv:slt"
+ },
+ {
+  "n": 27,
+  "text": "slt s0, s1, s2",
+  "status": "row",
+  "reason": "",
+  "key": "riscv:slt"
+ },
+ {
+  "n": 28,
+  "text": "sltu a0, a1, a2",
+  "status": "row",
+  "reason": "",
+  "key": "riscv:sltu"
+ },
+ {
+  "n": 29,
+  "text": "sltu t0, t1, t2",
+  "status": "row",
+  "reason": "",
+  "key": "riscv:sltu"
+ },
+ {
+  "n": 30,
+  "text": "sltu s0, s1, s2",
+  "status": "row",
+  "reason": "",
+  "key": "riscv:sltu"
+ },
+ {
+  "n": 31,
+  "text": "mul a0, a1, a2",
+  "status": "row",
+  "reason": "",
+  "key": "riscv:mul"
+ },
+ {
+  "n": 32,
+  "text": "mul t0, t1, t2",
+  "status": "row",
+  "reason": "",
+  "key": "riscv:mul"
+ },
+ {
+  "n": 33,
+  "text": "mul s0, s1, s2",
+  "status": "row",
+  "reason": "",
+  "key": "riscv:mul"
+ },
+ {
+  "n": 34,
+  "text": "div a0, a1, a2",
+  "status": "row",
+  "reason": "",
+  "key": "riscv:div"
+ },
+ {
+  "n": 35,
+  "text": "div t0, t1, t2",
+  "status": "row",
+  "reason": "",
+  "key": "riscv:div"
+ },
+ {
+  "n": 36,
+  "text": "div s0, s1, s2",
+  "status": "row",
+  "reason": "",
+  "key": "riscv:div"
+ },
+ {
+  "n": 37,
+  "text": "rem a0, a1, a2",
+  "status": "row",
+  "reason": "",
+  "key": "riscv:rem"
+ },
+ {
+  "n": 38,
+  "text": "rem t0, t1, t2",
+  "status": "row",
+  "reason": "",
+  "key": "riscv:rem"
+ },
+ {
+  "n": 39,
+  "text": "rem s0, s1, s2",
+  "status": "row",
+  "reason": "",
+  "key": "riscv:rem"
+ },
+ {
+  "n": 40,
+  "text": "addw a0, a1, a2",
+  "status": "row",
+  "reason": "",
+  "key": "riscv:addw"
+ },
+ {
+  "n": 41,
+  "text": "addw t0, t1, t2",
+  "status": "row",
+  "reason": "",
+  "key": "riscv:addw"
+ },
+ {
+  "n": 42,
+  "text": "addw s0, s1, s2",
+  "status": "row",
+  "reason": "",
+  "key": "riscv:addw"
+ },
+ {
+  "n": 43,
+  "text": "subw a0, a1, a2",
+  "status": "row",
+  "reason": "",
+  "key": "riscv:subw"
+ },
+ {
+  "n": 44,
+  "text": "subw t0, t1, t2",
+  "status": "row",
+  "reason": "",
+  "key": "riscv:subw"
+ },
+ {
+  "n": 45,
+  "text": "subw s0, s1, s2",
+  "status": "row",
+  "reason": "",
+  "key": "riscv:subw"
+ },
+ {
+  "n": 46,
+  "text": "mulw a0, a1, a2",
+  "status": "row",
+  "reason": "",
+  "key": "riscv:mulw"
+ },
+ {
+  "n": 47,
+  "text": "mulw t0, t1, t2",
+  "status": "row",
+  "reason": "",
+  "key": "riscv:mulw"
+ },
+ {
+  "n": 48,
+  "text": "mulw s0, s1, s2",
+  "status": "row",
+  "reason": "",
+  "key": "riscv:mulw"
+ },
+ {
+  "n": 49,
+  "text": "divw a0, a1, a2",
+  "status": "row",
+  "reason": "",
+  "key": "riscv:divw"
+ },
+ {
+  "n": 50,
+  "text": "divw t0, t1, t2",
+  "status": "row",
+  "reason": "",
+  "key": "riscv:divw"
+ },
+ {
+  "n": 51,
+  "text": "divw s0, s1, s2",
+  "status": "row",
+  "reason": "",
+  "key": "riscv:divw"
+ },
+ {
+  "n": 52,
+  "text": "remw a0, a1, a2",
+  "status": "row",
+  "reason": "",
+  "key": "riscv:remw"
+ },
+ {
+  "n": 53,
+  "text": "remw t0, t1, t2",
+  "status": "row",
+  "reason": "",
+  "key": "riscv:remw"
+ },
+ {
+  "n": 54,
+  "text": "remw s0, s1, s2",
+  "status": "row",
+  "reason": "",
+  "key": "riscv:remw"
+ },
+ {
+  "n": 55,
+  "text": "addi sp, sp, -16",
+  "status": "row",
+  "reason": "",
+  "key": "riscv:c.addi"
+ },
+ {
+  "n": 56,
+  "text": "sd ra, 8(sp)",
+  "status": "row",
+  "reason": "",
+  "key": "riscv:c.sdsp"
+ },
+ {
+  "n": 57,
+  "text": "ld ra, 8(sp)",
+  "status": "row",
+  "reason": "",
+  "key": "riscv:c.ldsp"
+ },
+ {
+  "n": 58,
+  "text": "addi a0, a0, 1",
+  "status": "row",
+  "reason": "",
+  "key": "riscv:c.addi"
+ },
+ {
+  "n": 59,
+  "text": "lw a0, 0(a1)",
+  "status": "row",
+  "reason": "",
+  "key": "riscv:c.lw"
+ },
+ {
+  "n": 60,
+  "text": "sw a0, 0(a1)",
+  "status": "row",
+  "reason": "",
+  "key": "riscv:c.sw"
+ },
+ {
+  "n": 61,
+  "text": "beq a0, a1, .L2",
+  "status": "no-row",
+  "reason": "no catalog row (fixup placeholder covers a pattern field)",
+  "key": null
+ },
+ {
+  "n": 62,
+  "text": "bne a0, zero, .L3",
+  "status": "no-row",
+  "reason": "no catalog row (fixup placeholder covers a pattern field)",
+  "key": null
+ },
+ {
+  "n": 63,
+  "text": "jal ra, external",
+  "status": "row",
+  "reason": "",
+  "key": "riscv:jal"
+ },
+ {
+  "n": 64,
+  "text": "jalr zero, 0(ra)",
+  "status": "row",
+  "reason": "",
+  "key": "riscv:c.jr"
+ },
+ {
+  "n": 65,
+  "text": "fadd.s fa0, fa1, fa2",
+  "status": "row",
+  "reason": "",
+  "key": "riscv:fadd.s"
+ },
+ {
+  "n": 66,
+  "text": "vadd.vv v0, v1, v2",
+  "status": "row",
+  "reason": "",
+  "key": "riscv:vadd.vv"
+ },
+ {
+  "n": 67,
+  "text": "vadd.vx v0, v1, a0",
+  "status": "row",
+  "reason": "",
+  "key": "riscv:vadd.vx"
+ },
+ {
+  "n": 68,
+  "text": "vmul.vv v0, v1, v2",
+  "status": "row",
+  "reason": "",
+  "key": "riscv:vmul.vv"
+ }
+]

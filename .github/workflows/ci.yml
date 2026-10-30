@@ -42,5 +42,19 @@ jobs:
       - name: node --check web/app.js
         run: node --check web/app.js && node --check web/lines.js && node --check web/identity.js
 
+      - name: Download the byte-identity wasm tools (wasm-v1 release)
+        # Verify each file against the release's own SHA256SUMS, same as
+        # rebuild-site.yml does for the deployed site.
+        run: |
+          mkdir -p "$RUNNER_TEMP/wasm-v1"
+          base=https://github.com/simd-labs/visualizer/releases/download/wasm-v1
+          curl -fsSL -o "$RUNNER_TEMP/wasm-v1/SHA256SUMS" "$base/SHA256SUMS"
+          for f in llvm-mc.js llvm-mc.wasm xedform.cjs xedform.wasm; do
+            curl -fsSL -o "$RUNNER_TEMP/wasm-v1/$f" "$base/$f"
+          done
+          cd "$RUNNER_TEMP/wasm-v1"
+          grep -E ' (llvm-mc\.js|llvm-mc\.wasm|xedform\.cjs|xedform\.wasm)$' SHA256SUMS | sha256sum -c -
+          echo "SIMDREF_WEB_IDENTITY_WASM=$RUNNER_TEMP/wasm-v1" >> "$GITHUB_ENV"
+
       - name: pytest
         run: python -m pytest -q

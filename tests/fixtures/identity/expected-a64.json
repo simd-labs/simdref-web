@@ -1,0 +1,751 @@
+[
+ {
+  "n": 1,
+  "text": "add x0, x1, x2",
+  "status": "row",
+  "reason": "",
+  "key": "arm:add (<xdorxzr__6>, <xnorxzr__12>, <xmorxzr__4>#0)"
+ },
+ {
+  "n": 2,
+  "text": "add w0, w1, w2",
+  "status": "row",
+  "reason": "",
+  "key": "arm:add (<wdorwzr>, <wnorwzr__3>, <wmorwzr__2>#0)"
+ },
+ {
+  "n": 3,
+  "text": "sub x0, x1, x2",
+  "status": "row",
+  "reason": "",
+  "key": "arm:sub (<xdorxzr__6>, <xnorxzr__12>, <xmorxzr__4>#0)"
+ },
+ {
+  "n": 4,
+  "text": "sub w0, w1, w2",
+  "status": "row",
+  "reason": "",
+  "key": "arm:sub (<wdorwzr>, <wnorwzr__3>, <wmorwzr__2>#0)"
+ },
+ {
+  "n": 5,
+  "text": "adds x0, x1, x2",
+  "status": "row",
+  "reason": "",
+  "key": "arm:adds (<xdorxzr__6>, <xnorxzr__12>, <xmorxzr__4>#0)"
+ },
+ {
+  "n": 6,
+  "text": "adds w0, w1, w2",
+  "status": "row",
+  "reason": "",
+  "key": "arm:adds (<wdorwzr>, <wnorwzr__3>, <wmorwzr__2>#0)"
+ },
+ {
+  "n": 7,
+  "text": "subs x0, x1, x2",
+  "status": "row",
+  "reason": "",
+  "key": "arm:subs (<xdorxzr__6>, <xnorxzr__12>, <xmorxzr__4>#0)"
+ },
+ {
+  "n": 8,
+  "text": "subs w0, w1, w2",
+  "status": "row",
+  "reason": "",
+  "key": "arm:subs (<wdorwzr>, <wnorwzr__3>, <wmorwzr__2>#0)"
+ },
+ {
+  "n": 9,
+  "text": "and x0, x1, x2",
+  "status": "row",
+  "reason": "",
+  "key": "arm:and (<xdorxzr__6>, <xnorxzr__12>, <xmorxzr__4>#0)"
+ },
+ {
+  "n": 10,
+  "text": "and w0, w1, w2",
+  "status": "row",
+  "reason": "",
+  "key": "arm:and (<wdorwzr>, <wnorwzr__3>, <wmorwzr__2>#0)"
+ },
+ {
+  "n": 11,
+  "text": "orr x0, x1, x2",
+  "status": "row",
+  "reason": "",
+  "key": "arm:orr (<xdorxzr__6>, <xnorxzr__12>, <xmorxzr__4>#0)"
+ },
+ {
+  "n": 12,
+  "text": "orr w0, w1, w2",
+  "status": "row",
+  "reason": "",
+  "key": "arm:orr (<wdorwzr>, <wnorwzr__3>, <wmorwzr__2>#0)"
+ },
+ {
+  "n": 13,
+  "text": "eor x0, x1, x2",
+  "status": "row",
+  "reason": "",
+  "key": "arm:eor (<xdorxzr__6>, <xnorxzr__12>, <xmorxzr__4>#0)"
+ },
+ {
+  "n": 14,
+  "text": "eor w0, w1, w2",
+  "status": "row",
+  "reason": "",
+  "key": "arm:eor (<wdorwzr>, <wnorwzr__3>, <wmorwzr__2>#0)"
+ },
+ {
+  "n": 15,
+  "text": "ands x0, x1, x2",
+  "status": "row",
+  "reason": "",
+  "key": "arm:ands (<xdorxzr__6>, <xnorxzr__12>, <xmorxzr__4>#0)"
+ },
+ {
+  "n": 16,
+  "text": "ands w0, w1, w2",
+  "status": "row",
+  "reason": "",
+  "key": "arm:ands (<wdorwzr>, <wnorwzr__3>, <wmorwzr__2>#0)"
+ },
+ {
+  "n": 17,
+  "text": "fadd s0, s1, s2",
+  "status": "row",
+  "reason": "",
+  "key": "arm:fadd (s0, s1, s2)"
+ },
+ {
+  "n": 18,
+  "text": "fadd d0, d1, d2",
+  "status": "row",
+  "reason": "",
+  "key": "arm:fadd (d0, d1, d2)"
+ },
+ {
+  "n": 19,
+  "text": "fsub s0, s1, s2",
+  "status": "row",
+  "reason": "",
+  "key": "arm:fsub (s0, s1, s2)"
+ },
+ {
+  "n": 20,
+  "text": "fsub d0, d1, d2",
+  "status": "row",
+  "reason": "",
+  "key": "arm:fsub (d0, d1, d2)"
+ },
+ {
+  "n": 21,
+  "text": "fmul s0, s1, s2",
+  "status": "row",
+  "reason": "",
+  "key": "arm:fmul (s0, s1, s2)"
+ },
+ {
+  "n": 22,
+  "text": "fmul d0, d1, d2",
+  "status": "row",
+  "reason": "",
+  "key": "arm:fmul (d0, d1, d2)"
+ },
+ {
+  "n": 23,
+  "text": "fdiv s0, s1, s2",
+  "status": "row",
+  "reason": "",
+  "key": "arm:fdiv (s0, s1, s2)"
+ },
+ {
+  "n": 24,
+  "text": "fdiv d0, d1, d2",
+  "status": "row",
+  "reason": "",
+  "key": "arm:fdiv (d0, d1, d2)"
+ },
+ {
+  "n": 25,
+  "text": "fmax s0, s1, s2",
+  "status": "row",
+  "reason": "",
+  "key": "arm:fmax (s0, s1, s2)"
+ },
+ {
+  "n": 26,
+  "text": "fmax d0, d1, d2",
+  "status": "row",
+  "reason": "",
+  "key": "arm:fmax (d0, d1, d2)"
+ },
+ {
+  "n": 27,
+  "text": "fmin s0, s1, s2",
+  "status": "row",
+  "reason": "",
+  "key": "arm:fmin (s0, s1, s2)"
+ },
+ {
+  "n": 28,
+  "text": "fmin d0, d1, d2",
+  "status": "row",
+  "reason": "",
+  "key": "arm:fmin (d0, d1, d2)"
+ },
+ {
+  "n": 29,
+  "text": "fneg s0, s1",
+  "status": "row",
+  "reason": "",
+  "key": "arm:fneg (s0, s1)"
+ },
+ {
+  "n": 30,
+  "text": "fneg d0, d1",
+  "status": "row",
+  "reason": "",
+  "key": "arm:fneg (d0, d1)"
+ },
+ {
+  "n": 31,
+  "text": "fabs s0, s1",
+  "status": "row",
+  "reason": "",
+  "key": "arm:fabs (s0, s1)"
+ },
+ {
+  "n": 32,
+  "text": "fabs d0, d1",
+  "status": "row",
+  "reason": "",
+  "key": "arm:fabs (d0, d1)"
+ },
+ {
+  "n": 33,
+  "text": "fsqrt s0, s1",
+  "status": "row",
+  "reason": "",
+  "key": "arm:fsqrt (s0, s1)"
+ },
+ {
+  "n": 34,
+  "text": "fsqrt d0, d1",
+  "status": "row",
+  "reason": "",
+  "key": "arm:fsqrt (d0, d1)"
+ },
+ {
+  "n": 35,
+  "text": "fmov s0, s1",
+  "status": "row",
+  "reason": "",
+  "key": "arm:fmov (s0, s1)"
+ },
+ {
+  "n": 36,
+  "text": "fmov d0, d1",
+  "status": "row",
+  "reason": "",
+  "key": "arm:fmov (d0, d1)"
+ },
+ {
+  "n": 37,
+  "text": "ldr x0, [x9, #16]",
+  "status": "row",
+  "reason": "",
+  "key": "arm:ldr (<xtorxzr__11>, [<xnsp_option>#0])"
+ },
+ {
+  "n": 38,
+  "text": "ldr x0, [x9], #16",
+  "status": "row",
+  "reason": "",
+  "key": "arm:ldr (<xtorxzr__11>, [<xnsp_option>], <hash>#0)"
+ },
+ {
+  "n": 39,
+  "text": "ldr x0, [x9, #-16]!",
+  "status": "row",
+  "reason": "",
+  "key": "arm:ldr (<xtorxzr__11>, [<xnsp_option>, <hash>#0]!)"
+ },
+ {
+  "n": 40,
+  "text": "ldr w0, [x9, #16]",
+  "status": "row",
+  "reason": "",
+  "key": "arm:ldr (<wtorwzr__4>, [<xnsp_option>#0])"
+ },
+ {
+  "n": 41,
+  "text": "ldr w0, [x9], #16",
+  "status": "row",
+  "reason": "",
+  "key": "arm:ldr (<wtorwzr__4>, [<xnsp_option>], <hash>#0)"
+ },
+ {
+  "n": 42,
+  "text": "ldr w0, [x9, #-16]!",
+  "status": "row",
+  "reason": "",
+  "key": "arm:ldr (<wtorwzr__4>, [<xnsp_option>, <hash>#0]!)"
+ },
+ {
+  "n": 43,
+  "text": "ldr s0, [x9, #16]",
+  "status": "row",
+  "reason": "",
+  "key": "arm:ldr (<st>, [<xnsp_option>#0])"
+ },
+ {
+  "n": 44,
+  "text": "ldr s0, [x9], #16",
+  "status": "row",
+  "reason": "",
+  "key": "arm:ldr (<st>, [<xnsp_option>], <hash>#0)"
+ },
+ {
+  "n": 45,
+  "text": "ldr s0, [x9, #-16]!",
+  "status": "row",
+  "reason": "",
+  "key": "arm:ldr (<st>, [<xnsp_option>, <hash>#0]!)"
+ },
+ {
+  "n": 46,
+  "text": "ldr d0, [x9, #16]",
+  "status": "row",
+  "reason": "",
+  "key": "arm:ldr (<dt>, [<xnsp_option>#0])"
+ },
+ {
+  "n": 47,
+  "text": "ldr d0, [x9], #16",
+  "status": "row",
+  "reason": "",
+  "key": "arm:ldr (<dt>, [<xnsp_option>], <hash>#0)"
+ },
+ {
+  "n": 48,
+  "text": "ldr d0, [x9, #-16]!",
+  "status": "row",
+  "reason": "",
+  "key": "arm:ldr (<dt>, [<xnsp_option>, <hash>#0]!)"
+ },
+ {
+  "n": 49,
+  "text": "ldr q0, [x9, #16]",
+  "status": "row",
+  "reason": "",
+  "key": "arm:ldr (q0, [<xnsp_option>#0])"
+ },
+ {
+  "n": 50,
+  "text": "ldr q0, [x9], #16",
+  "status": "row",
+  "reason": "",
+  "key": "arm:ldr (q0, [<xnsp_option>], <hash>#0)"
+ },
+ {
+  "n": 51,
+  "text": "ldr q0, [x9, #-16]!",
+  "status": "row",
+  "reason": "",
+  "key": "arm:ldr (q0, [<xnsp_option>, <hash>#0]!)"
+ },
+ {
+  "n": 52,
+  "text": "str x0, [x9, #16]",
+  "status": "row",
+  "reason": "",
+  "key": "arm:str (<xtorxzr__11>, [<xnsp_option>#0])"
+ },
+ {
+  "n": 53,
+  "text": "str x0, [x9], #16",
+  "status": "row",
+  "reason": "",
+  "key": "arm:str (<xtorxzr__11>, [<xnsp_option>], <hash>#0)"
+ },
+ {
+  "n": 54,
+  "text": "str x0, [x9, #-16]!",
+  "status": "row",
+  "reason": "",
+  "key": "arm:str (<xtorxzr__11>, [<xnsp_option>, <hash>#0]!)"
+ },
+ {
+  "n": 55,
+  "text": "str w0, [x9, #16]",
+  "status": "row",
+  "reason": "",
+  "key": "arm:str (<wtorwzr__4>, [<xnsp_option>#0])"
+ },
+ {
+  "n": 56,
+  "text": "str w0, [x9], #16",
+  "status": "row",
+  "reason": "",
+  "key": "arm:str (<wtorwzr__4>, [<xnsp_option>], <hash>#0)"
+ },
+ {
+  "n": 57,
+  "text": "str w0, [x9, #-16]!",
+  "status": "row",
+  "reason": "",
+  "key": "arm:str (<wtorwzr__4>, [<xnsp_option>, <hash>#0]!)"
+ },
+ {
+  "n": 58,
+  "text": "str s0, [x9, #16]",
+  "status": "row",
+  "reason": "",
+  "key": "arm:str (<st>, [<xnsp_option>#0])"
+ },
+ {
+  "n": 59,
+  "text": "str s0, [x9], #16",
+  "status": "row",
+  "reason": "",
+  "key": "arm:str (<st>, [<xnsp_option>], <hash>#0)"
+ },
+ {
+  "n": 60,
+  "text": "str s0, [x9, #-16]!",
+  "status": "row",
+  "reason": "",
+  "key": "arm:str (<st>, [<xnsp_option>, <hash>#0]!)"
+ },
+ {
+  "n": 61,
+  "text": "str d0, [x9, #16]",
+  "status": "row",
+  "reason": "",
+  "key": "arm:str (<dt>, [<xnsp_option>#0])"
+ },
+ {
+  "n": 62,
+  "text": "str d0, [x9], #16",
+  "status": "row",
+  "reason": "",
+  "key": "arm:str (<dt>, [<xnsp_option>], <hash>#0)"
+ },
+ {
+  "n": 63,
+  "text": "str d0, [x9, #-16]!",
+  "status": "row",
+  "reason": "",
+  "key": "arm:str (<dt>, [<xnsp_option>, <hash>#0]!)"
+ },
+ {
+  "n": 64,
+  "text": "str q0, [x9, #16]",
+  "status": "row",
+  "reason": "",
+  "key": "arm:str (q0, [<xnsp_option>#0])"
+ },
+ {
+  "n": 65,
+  "text": "str q0, [x9], #16",
+  "status": "row",
+  "reason": "",
+  "key": "arm:str (q0, [<xnsp_option>], <hash>#0)"
+ },
+ {
+  "n": 66,
+  "text": "str q0, [x9, #-16]!",
+  "status": "row",
+  "reason": "",
+  "key": "arm:str (q0, [<xnsp_option>, <hash>#0]!)"
+ },
+ {
+  "n": 67,
+  "text": "mov x0, x1",
+  "status": "row",
+  "reason": "",
+  "key": "arm:orr (<xdorxzr__6>, <xnorxzr__12>, <xmorxzr__4>#0)"
+ },
+ {
+  "n": 68,
+  "text": "mov w0, w1",
+  "status": "row",
+  "reason": "",
+  "key": "arm:orr (<wdorwzr>, <wnorwzr__3>, <wmorwzr__2>#0)"
+ },
+ {
+  "n": 69,
+  "text": "mov w0, #0x10",
+  "status": "row",
+  "reason": "",
+  "key": "arm:movz (<wdorwzr>, <hash>#0<optional_extend__12>)"
+ },
+ {
+  "n": 70,
+  "text": "mov x0, #-1",
+  "status": "row",
+  "reason": "",
+  "key": "arm:movn (<xdorxzr__6>, <hash>#0<optional_extend__13>)"
+ },
+ {
+  "n": 71,
+  "text": "mov x29, sp",
+  "status": "row",
+  "reason": "",
+  "key": "arm:add (<xdsp_option>, <xnsp_option__3>, <hash>#0#0)"
+ },
+ {
+  "n": 72,
+  "text": "mov sp, x29",
+  "status": "row",
+  "reason": "",
+  "key": "arm:add (<xdsp_option>, <xnsp_option__3>, <hash>#0#0)"
+ },
+ {
+  "n": 73,
+  "text": "mov fp, sp",
+  "status": "row",
+  "reason": "",
+  "key": "arm:add (<xdsp_option>, <xnsp_option__3>, <hash>#0#0)"
+ },
+ {
+  "n": 74,
+  "text": "cmp x29, sp",
+  "status": "no-row",
+  "reason": "expected compatible register, symbol or integer in range [0, 4095]",
+  "key": null
+ },
+ {
+  "n": 75,
+  "text": "cmp fp, sp",
+  "status": "no-row",
+  "reason": "expected compatible register, symbol or integer in range [0, 4095]",
+  "key": null
+ },
+ {
+  "n": 76,
+  "text": "cmp x0, x1",
+  "status": "row",
+  "reason": "",
+  "key": "arm:subs (<xdorxzr__6>, <xnorxzr__12>, <xmorxzr__4>#0)"
+ },
+ {
+  "n": 77,
+  "text": "cmn x0, x1",
+  "status": "row",
+  "reason": "",
+  "key": "arm:adds (<xdorxzr__6>, <xnorxzr__12>, <xmorxzr__4>#0)"
+ },
+ {
+  "n": 78,
+  "text": "tst x0, x1",
+  "status": "row",
+  "reason": "",
+  "key": "arm:ands (<xdorxzr__6>, <xnorxzr__12>, <xmorxzr__4>#0)"
+ },
+ {
+  "n": 79,
+  "text": "add x0, x1, x2, lsl #2",
+  "status": "row",
+  "reason": "",
+  "key": "arm:add (<xdorxzr__6>, <xnorxzr__12>, <xmorxzr__4>#0)"
+ },
+ {
+  "n": 80,
+  "text": "sub x0, x1, x2, sxtx #2",
+  "status": "row",
+  "reason": "",
+  "key": "arm:sub (<xdsp_option>, <xnsp_option__6>, <r_option__2><rm_option><optional_extend__16>)"
+ },
+ {
+  "n": 81,
+  "text": "ld1b {z0.b}, p0/z, [x0]",
+  "status": "row",
+  "reason": "",
+  "key": "arm:ld1b ({<opt_space>z0.b<opt_space>}, p0/z, [<xnsp__3>#0])"
+ },
+ {
+  "n": 82,
+  "text": "ld1w {z0.s}, p0/z, [x0]",
+  "status": "row",
+  "reason": "",
+  "key": "arm:ld1w ({<opt_space>z0.s<opt_space>}, p0/z, [<xnsp__3>#0])"
+ },
+ {
+  "n": 83,
+  "text": "ldr s1, [x11], #4",
+  "status": "row",
+  "reason": "",
+  "key": "arm:ldr (<st>, [<xnsp_option>], <hash>#0)"
+ },
+ {
+  "n": 84,
+  "text": "ldp x29, x30, [sp], #16",
+  "status": "row",
+  "reason": "",
+  "key": "arm:ldp (<xt1orxzr>, <xt2orxzr>, [<xnsp_option>], <hash>#0)"
+ },
+ {
+  "n": 85,
+  "text": "stp x29, x30, [sp, #-16]!",
+  "status": "row",
+  "reason": "",
+  "key": "arm:stp (<xt1orxzr>, <xt2orxzr>, [<xnsp_option>, <hash>#0]!)"
+ },
+ {
+  "n": 86,
+  "text": "ldr x0, [x1, x2, lsl #3]",
+  "status": "row",
+  "reason": "",
+  "key": "arm:ldr (<xtorxzr__11>, [<xnsp_option>, <worx_choice><optional_extend__9>])"
+ },
+ {
+  "n": 87,
+  "text": "fcvt d0, s1",
+  "status": "row",
+  "reason": "",
+  "key": "arm:fcvt (d0, s1)"
+ },
+ {
+  "n": 88,
+  "text": "fcvt s0, d1",
+  "status": "row",
+  "reason": "",
+  "key": "arm:fcvt (s0, d1)"
+ },
+ {
+  "n": 89,
+  "text": "ret",
+  "status": "row",
+  "reason": "",
+  "key": "arm:ret"
+ },
+ {
+  "n": 90,
+  "text": "b .LBB0_2",
+  "status": "row",
+  "reason": "",
+  "key": "arm:b (#0) [b_only_branch_imm]"
+ },
+ {
+  "n": 91,
+  "text": "bl external",
+  "status": "row",
+  "reason": "",
+  "key": "arm:bl (#0)"
+ },
+ {
+  "n": 92,
+  "text": "ld1b {z0.b, z1.b}, pn8/z, [x0]",
+  "status": "row",
+  "reason": "",
+  "key": "arm:ld1b ({<opt_space><zt1>.b-<zt2>.b<opt_space>}, <png>/z, [<xnsp__3>#0])"
+ },
+ {
+  "n": 93,
+  "text": "ld1b {z0.b-z1.b}, pn8/z, [x0]",
+  "status": "row",
+  "reason": "",
+  "key": "arm:ld1b ({<opt_space><zt1>.b-<zt2>.b<opt_space>}, <png>/z, [<xnsp__3>#0])"
+ },
+ {
+  "n": 94,
+  "text": "ld1h {z0.h, z1.h}, pn8/z, [x0]",
+  "status": "row",
+  "reason": "",
+  "key": "arm:ld1h ({<opt_space><zt1>.h-<zt2>.h<opt_space>}, <png>/z, [<xnsp__3>#0])"
+ },
+ {
+  "n": 95,
+  "text": "ld1h {z0.h-z1.h}, pn8/z, [x0]",
+  "status": "row",
+  "reason": "",
+  "key": "arm:ld1h ({<opt_space><zt1>.h-<zt2>.h<opt_space>}, <png>/z, [<xnsp__3>#0])"
+ },
+ {
+  "n": 96,
+  "text": "ld1w {z0.s, z1.s}, pn8/z, [x0]",
+  "status": "row",
+  "reason": "",
+  "key": "arm:ld1w ({<opt_space><zt1>.s-<zt2>.s<opt_space>}, <png>/z, [<xnsp__3>#0])"
+ },
+ {
+  "n": 97,
+  "text": "ld1w {z0.s-z1.s}, pn8/z, [x0]",
+  "status": "row",
+  "reason": "",
+  "key": "arm:ld1w ({<opt_space><zt1>.s-<zt2>.s<opt_space>}, <png>/z, [<xnsp__3>#0])"
+ },
+ {
+  "n": 98,
+  "text": "ld1d {z0.d, z1.d}, pn8/z, [x0]",
+  "status": "row",
+  "reason": "",
+  "key": "arm:ld1d ({<opt_space><zt1>.d-<zt2>.d<opt_space>}, <png>/z, [<xnsp__3>#0])"
+ },
+ {
+  "n": 99,
+  "text": "ld1d {z0.d-z1.d}, pn8/z, [x0]",
+  "status": "row",
+  "reason": "",
+  "key": "arm:ld1d ({<opt_space><zt1>.d-<zt2>.d<opt_space>}, <png>/z, [<xnsp__3>#0])"
+ },
+ {
+  "n": 100,
+  "text": "st1b {z0.b, z1.b}, pn8, [x0]",
+  "status": "row",
+  "reason": "",
+  "key": "arm:st1b ({<opt_space><zt1>.b-<zt2>.b<opt_space>}, <png>, [<xnsp__3>#0])"
+ },
+ {
+  "n": 101,
+  "text": "st1b {z0.b-z1.b}, pn8, [x0]",
+  "status": "row",
+  "reason": "",
+  "key": "arm:st1b ({<opt_space><zt1>.b-<zt2>.b<opt_space>}, <png>, [<xnsp__3>#0])"
+ },
+ {
+  "n": 102,
+  "text": "st1h {z0.h, z1.h}, pn8, [x0]",
+  "status": "row",
+  "reason": "",
+  "key": "arm:st1h ({<opt_space><zt1>.h-<zt2>.h<opt_space>}, <png>, [<xnsp__3>#0])"
+ },
+ {
+  "n": 103,
+  "text": "st1h {z0.h-z1.h}, pn8, [x0]",
+  "status": "row",
+  "reason": "",
+  "key": "arm:st1h ({<opt_space><zt1>.h-<zt2>.h<opt_space>}, <png>, [<xnsp__3>#0])"
+ },
+ {
+  "n": 104,
+  "text": "st1w {z0.s, z1.s}, pn8, [x0]",
+  "status": "row",
+  "reason": "",
+  "key": "arm:st1w ({<opt_space><zt1>.s-<zt2>.s<opt_space>}, <png>, [<xnsp__3>#0])"
+ },
+ {
+  "n": 105,
+  "text": "st1w {z0.s-z1.s}, pn8, [x0]",
+  "status": "row",
+  "reason": "",
+  "key": "arm:st1w ({<opt_space><zt1>.s-<zt2>.s<opt_space>}, <png>, [<xnsp__3>#0])"
+ },
+ {
+  "n": 106,
+  "text": "st1d {z0.d, z1.d}, pn8, [x0]",
+  "status": "row",
+  "reason": "",
+  "key": "arm:st1d ({<opt_space><zt1>.d-<zt2>.d<opt_space>}, <png>, [<xnsp__3>#0])"
+ },
+ {
+  "n": 107,
+  "text": "st1d {z0.d-z1.d}, pn8, [x0]",
+  "status": "row",
+  "reason": "",
+  "key": "arm:st1d ({<opt_space><zt1>.d-<zt2>.d<opt_space>}, <png>, [<xnsp__3>#0])"
+ }
+]
