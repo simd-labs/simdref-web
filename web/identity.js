@@ -43,6 +43,8 @@ const CONT_RE = /^\s+(#|\/\/|@|;)/;
 const LABEL_RE = /^[\w.$]+:/;
 const BYTE_RE = /^0x([0-9a-fA-F]{2})(?:'A')?$/;
 const BITS_RE = /^0b([01Aa]{8})$/;
+const MODE_DIR_RE = /^\.(code16gcc|code16|code32|code64)\b/;
+const MODE_BITS = Object.freeze({ code16: "16", code16gcc: "16", code32: "32", code64: "64" });
 
 /* uops.info eosz attribute values per effective operand size. */
 const EOSZ_ATTR = Object.freeze({ 16: "1", 32: "2", 64: "3" });
@@ -131,12 +133,31 @@ function classifyLine(text) {
   return null;
 }
 
+/* asm_identity._x86_modes: the mode llvm-mc assembles each line in.
+ * `.code16`/`.code16gcc`/`.code32`/`.code64` switch it; the x86_64
+ * triple starts at 64. */
+function x86Modes(lines) {
+  let mode = "64";
+  return lines.map((text) => {
+    let stripped = text.trim();
+    const label = LABEL_RE.exec(stripped);
+    if (label) stripped = stripped.slice(label[0].length).trim();
+    const found = MODE_DIR_RE.exec(stripped);
+    if (found) mode = MODE_BITS[found[1]];
+    return mode;
+  });
+}
+
 function parseEchoBlocks(stdout) {
   const blocks = [];
   for (const line of stdout.split("\n")) {
     /* Continuation lines carry the encoding/MCInst info of the block
-     * above them; only a fresh echo line opens a new block. */
-    if (!CONT_RE.test(line) || !blocks.length) blocks.push({ opcode: null, bytes: null });
+     * above them; only a fresh echo line opens a new block. The echo
+     * text marks the block: the line-marker labels echo back here. */
+    const cont = CONT_RE.test(line);
+    if (!cont || !blocks.length) {
+      blocks.push({ echo: cont ? "" : line.trimEnd(), opcode: null, bytes: null });
+    }
     const block = blocks[blocks.length - 1];
     if (block.opcode === null) {
       const m = INST_RE.exec(line);
@@ -170,6 +191,33 @@ function bytesToWords(hexbytes) {
     out.push(token.startsWith("0b") ? parseInt(m[1].replace(/[Aa]/g, "0"), 2) : parseInt(m[1], 16));
   }
   return Uint8Array.from(out);
+}
+
+/* asm_identity._covered_mask, kept per byte: bit mask of fixup-covered
+ * bits in each byte. A binary token names its known bits and a plain
+ * hex byte names all 8; every other shape names none. */
+function coveredBits(hexbytes) {
+  if (!hexbytes) return [];
+  return hexbytes.split(",").map((token) => {
+    token = token.trim();
+    const bits = BITS_RE.exec(token);
+    if (bits) {
+      let covered = 0;
+      for (let pos = 0; pos < 8; pos++) {
+        if (bits[1][pos] === "A" || bits[1][pos] === "a") covered |= 1 << (7 - pos);
+      }
+      return covered;
+    }
+    if (BYTE_RE.exec(token) && !token.endsWith("'A'")) return 0;
+    return 0xff;
+  });
+}
+
+/* The covered bits of one <=4-byte word as an unsigned mask. */
+function coveredWord(bits) {
+  let mask = 0;
+  for (let i = 0; i < bits.length; i++) mask = (mask | (bits[i] << (8 * i))) >>> 0;
+  return mask;
 }
 
 // --------------------------------------------------------------------
@@ -357,7 +405,7 @@ function agenFacts(d) {
   };
 }
 
-function x86Pick(pool, d) {
+function x86Pick(pool, d, immUnknown) {
   let cur = pool.slice();
   const filt = (stageOk, pred) => {
     if (cur.length <= 1 || !stageOk) return;
@@ -387,9 +435,11 @@ function x86Pick(pool, d) {
       return true;
     }
   );
+  /* A fixup placeholder covers the immediate (audit A1): the immzero
+   * split cannot narrow on it. */
   const immZero = d.imm === 0 ? "1" : "0";
   filt(
-    cur.some((row) => "immzero" in row.attrs),
+    !immUnknown && cur.some((row) => "immzero" in row.attrs),
     (a) => ("immzero" in a ? a.immzero : immZero) === immZero
   );
   const masked = d.regs.some((reg) => reg.startsWith("K") && reg !== "K0") ? "1" : "0";
@@ -421,61 +471,77 @@ function mcArgs(arch) {
 
 async function probeLines(tools, lines, arch) {
   const args = mcArgs(arch);
-  const work = lines.slice();
+  /* The map comes from llvm-mc's own output, never from counting: a
+   * unique label (the line marker) stands before every source line and
+   * echoes back among the output blocks, so the blocks after marker i
+   * and before the next forward marker belong to source line i. One
+   * line can yield several blocks (';' statements, label + instruction,
+   * macro expansion) or none (comment, macro body, '.endm'). Only a
+   * line with exactly one encoding block and its marker echoed exactly
+   * once has proven bytes. (asm_identity._probe_lines) */
+  const nonce = [...crypto.getRandomValues(new Uint8Array(4))]
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+  const markers = lines.map((_, i) => `.L__simdref_lm_${nonce}_${i + 1}:`);
+  const work = [];
+  for (let i = 0; i < lines.length; i++) work.push(markers[i], lines[i]);
+  /* The trailing newline keeps trailing blank source lines in the
+   * input (a bare join swallows them and the whole map fails). */
+  const run = await runMc(tools, args, work.join("\n") + "\n");
+
+  /* Error lines number the marked document: 2i-1 is the marker of
+   * source line i, 2i is the source line itself. */
   const errors = new Map();
-  let stdout = "";
-  let lastErrs = new Map();
-  /* Blank failing lines and re-run, at most three passes. */
-  for (let pass = 0; pass < 3; pass++) {
-    const run = await runMc(tools, args, work.join("\n"));
-    stdout = run.stdout;
-    lastErrs = new Map();
-    for (const line of run.stderr.split("\n")) {
-      const m = ERR_RE.exec(line);
-      if (m && !lastErrs.has(Number(m[1]))) lastErrs.set(Number(m[1]), m[3]);
+  for (const line of run.stderr.split("\n")) {
+    const m = ERR_RE.exec(line);
+    if (m && !errors.has(Number(m[1]))) errors.set(Number(m[1]), m[3]);
+  }
+  const blocks = parseEchoBlocks(run.stdout);
+
+  const indexOf = new Map(markers.map((marker, i) => [marker, i + 1]));
+  const seen = new Map();
+  const buckets = new Map();
+  let current = 0;
+  for (const block of blocks) {
+    const marker = indexOf.get(block.echo.trim());
+    if (marker === undefined) {
+      if (!buckets.has(current)) buckets.set(current, []);
+      buckets.get(current).push(block);
+      continue;
     }
-    if (!lastErrs.size) break;
-    for (const [lineNo, text] of lastErrs) {
-      if (!errors.has(lineNo)) errors.set(lineNo, text);
-      work[lineNo - 1] = "";
-    }
+    seen.set(marker, (seen.get(marker) || 0) + 1);
+    /* Only a forward marker moves the attribution: a marker echoed
+     * again comes from a macro or .rept body expansion, and those
+     * blocks belong to the line that triggered the expansion. */
+    if (marker > current) current = marker;
   }
 
-  const results = lines.map((text, i) => {
+  return lines.map((text, i) => {
+    const n = i + 1;
     const kind = classifyLine(text);
-    if (errors.has(i + 1)) return { n: i + 1, text, status: "REJECTED", error: errors.get(i + 1) };
-    if (kind !== null) return { n: i + 1, text, status: "NOT-AN-INSTRUCTION", kind };
-    return { n: i + 1, text, status: "PENDING" };
-  });
-
-  /* Lockstep: source lines map one-to-one to echo blocks, except
-   * comments (dropped) and lines that failed in the final pass. */
-  const echoed = lines
-    .map((text, i) => ({ n: i + 1, text }))
-    .filter(({ n, text }) => classifyLine(text) !== "comment" && !lastErrs.has(n));
-  const blocks = parseEchoBlocks(stdout);
-  const pending = results.filter((r) => r.status === "PENDING");
-  if (blocks.length === echoed.length) {
-    echoed.forEach(({ n }, i) => {
-      const result = results[n - 1];
-      if (result.status !== "PENDING") return;
-      const { opcode, bytes } = blocks[i];
-      if (opcode !== null) {
-        result.status = "OK";
-        result.bytes = bytes;
-        result.opcode = opcode;
-      } else {
-        result.status = "NOT-AN-INSTRUCTION";
-        result.kind = "echo-no-inst";
-      }
-    });
-  } else {
-    for (const result of pending) {
-      result.status = "REJECTED";
-      result.error = `line mapping unverified (echo ${blocks.length} vs source ${echoed.length})`;
+    if (errors.has(2 * n)) return { n, text, status: "REJECTED", error: errors.get(2 * n) };
+    const bucket = buckets.get(n) || [];
+    const enc = bucket.filter((block) => block.bytes !== null);
+    const proven = (seen.get(n) || 0) === 1 && !errors.has(2 * n - 1);
+    if (kind === "blank" || kind === "label" || kind === "directive") {
+      /* These kinds are certain from the text; a leaked block from a
+       * line with a swallowed marker never becomes this line's row. */
+      return { n, text, status: "NOT-AN-INSTRUCTION", kind };
     }
-  }
-  return results;
+    if (enc.length === 1 && proven) {
+      return { n, text, status: "OK", bytes: enc[0].bytes, opcode: enc[0].opcode };
+    }
+    if (!enc.length && kind !== null) return { n, text, status: "NOT-AN-INSTRUCTION", kind };
+    if (!enc.length && bucket.length === 1) {
+      return { n, text, status: "NOT-AN-INSTRUCTION", kind: "echo-no-inst" };
+    }
+    const reason = !proven
+      ? `line mapping unverified (marker echoes ${seen.get(n) || 0})`
+      : enc.length > 1
+        ? `line mapping unverified (${enc.length} instruction blocks on one line)`
+        : "line mapping unverified (no instruction echo for the line)";
+    return { n, text, status: "REJECTED", error: reason };
+  });
 }
 
 /* asm_identity._rv_tiebreak: name the row by llvm-mc's own MCInst
@@ -495,12 +561,15 @@ function identifyWords(probed, results, arch) {
   for (const [entry, result] of zip(probed, results)) {
     if (entry.status !== "OK") continue;
     const raw = bytesToWords(entry.bytes);
-    let rows;
+    const covered = coveredWord(coveredBits(entry.bytes));
+    let rows, checks;
     if (arch === "aarch64") {
       if (raw.length !== 4) { result.reason = "no catalog row (not one 32-bit word)"; continue; }
       const word = new DataView(raw.buffer, raw.byteOffset, 4).getUint32(0, true);
-      const hits = refineSubset(shard.a64.filter((p) => ((word & p.mask) >>> 0) === p.match));
-      rows = hits;
+      /* A fixup placeholder covers pattern bits (audit A4): match the
+       * known bits only, never the zero fill. */
+      checks = shard.a64.filter((p) => ((word ^ p.match) & p.mask & ~covered) === 0);
+      rows = refineSubset(checks);
     } else {
       if (raw.length !== 2 && raw.length !== 4) {
         result.reason = "no catalog row (not a 16/32-bit word)";
@@ -508,10 +577,30 @@ function identifyWords(probed, results, arch) {
       }
       const dv = new DataView(raw.buffer, raw.byteOffset, raw.length);
       const word = raw.length === 2 ? dv.getUint16(0, true) : dv.getUint32(0, true);
-      rows = rvPatternsFor(docBase).filter(
-        (p) => p.bits === raw.length * 8 && ((word & p.mask) >>> 0) === p.match
+      checks = rvPatternsFor(docBase).filter(
+        (p) => p.bits === raw.length * 8 && ((word ^ p.match) & p.mask & ~covered) === 0
       );
-      if (rows.length > 1) rows = rvTiebreak(rows, entry.opcode);
+      rows = checks.length > 1 ? rvTiebreak(checks, entry.opcode) : checks;
+    }
+    if (covered) {
+      /* The row is decided without the placeholder only when one row
+       * survives on the known bits and one of its matching patterns
+       * reads no covered bit: then the pattern holds for every value
+       * of the placeholder and the row is not a guess. (audit A4) */
+      const keys = [...new Set(rows.map((r) => r.key))];
+      const decided =
+        keys.length === 1 && checks.some((c) => (c.mask & covered) === 0 && c.key === keys[0]);
+      if (decided) {
+        result.status = "row";
+        result.key = keys[0];
+      } else if (!keys.length) {
+        result.reason = "no catalog row";
+      } else if (keys.length > 1) {
+        result.reason = `no catalog row (fixup placeholder decides between ${keys.length} rows)`;
+      } else {
+        result.reason = "no catalog row (fixup placeholder covers a pattern field)";
+      }
+      continue;
     }
     const keys = [...new Set(rows.map((r) => r.key))];
     if (keys.length === 1) {
@@ -526,9 +615,22 @@ function identifyWords(probed, results, arch) {
 }
 // keys are deduped for the row verdict: Python rows carry db_key
 // one-to-one, and the shard keys one entry per row, so this matches.
+// With covered = 0 the match test is (word & mask) === match again, so
+// the covered-aware filter needs no separate fast path.
 
-async function identifyX86(tools, probed, results) {
-  const pending = [...zip(probed, results)].filter(([entry]) => entry.status === "OK");
+async function identifyX86(tools, probed, results, modes) {
+  const pending = [];
+  for (const [entry, result] of zip(probed, results)) {
+    if (entry.status !== "OK") continue;
+    const mode = modes[entry.n - 1];
+    /* The decoder runs in 64-bit mode (audit B1); a line another mode
+     * encodes decodes to the wrong facts, so it reports no row. */
+    if (mode !== "64") {
+      result.reason = `no catalog row (assembled in ${mode}-bit mode)`;
+      continue;
+    }
+    pending.push([entry, result]);
+  }
   if (!pending.length) return;
   const hexes = pending.map(([entry]) =>
     [...bytesToWords(entry.bytes)].map((b) => b.toString(16).padStart(2, "0")).join("")
@@ -538,11 +640,27 @@ async function identifyX86(tools, probed, results) {
     if ("error" in fact) { result.reason = `no catalog row (XED ${fact.error})`; continue; }
     const pool = shard.iform.get(fact.iform) || [];
     if (!pool.length) { result.reason = `no catalog row (iform ${fact.iform} absent)`; continue; }
+    /* A fixup placeholder covers the immediate value (audit A1): the
+     * pick must not read it, and a row carrying an immzero claim about
+     * it would be a guess either way. */
+    const covered = coveredBits(entry.bytes).some((byte) => byte !== 0);
     let rows;
     try {
-      rows = pool.length > 1 ? x86Pick(pool, fact) : pool;
+      rows = pool.length > 1 ? x86Pick(pool, fact, covered) : pool;
     } catch (e) {
       result.reason = `no catalog row (${e.message})`;
+      continue;
+    }
+    if (covered) {
+      const guessed = rows.filter((row) => "immzero" in row.attrs);
+      if (rows.length === 1 && !guessed.length) {
+        result.status = "row";
+        result.key = rows[0].key;
+      } else if (rows.length > 1) {
+        result.reason = `no catalog row (fixup placeholder decides between ${rows.length} rows)`;
+      } else {
+        result.reason = "no catalog row (fixup placeholder covers an encoded field)";
+      }
       continue;
     }
     if (rows.length === 1) {
@@ -579,7 +697,7 @@ async function identifyDocument(tools, text, arch) {
           : "",
     key: null,
   }));
-  if (arch === "x86") await identifyX86(tools, probed, results);
+  if (arch === "x86") await identifyX86(tools, probed, results, x86Modes(lines));
   else identifyWords(probed, results, arch);
   return results;
 }

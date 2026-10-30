@@ -166,6 +166,66 @@ def test_crlf_and_form_feed_split_like_splitlines(browser, tmp_path):
     assert actual[3]["status"] == "row" and actual[3]["key"] == expected[1]["key"], actual[3]
 
 
+def _identify_doc(browser, tmp_path, document, isa="x86"):
+    """Run one document through the identity worker on the real site."""
+    site = tmp_path / f"site{len(list(tmp_path.iterdir()))}"
+    _build_site(site, IDIR / "wasm")
+    port = _free_port()
+    with _serve(site, port):
+        page = browser.new_page()
+        try:
+            page.add_init_script("window.__simdrefWasmBase = location.origin + '/wasm-v1/';")
+            page.goto(f"http://127.0.0.1:{port}/")
+            return page.evaluate(
+                "(args) => resolveIdentityKeys(args.text, args.isa)",
+                {"text": document, "isa": isa},
+            )
+        finally:
+            page.close()
+
+
+@requires_fixtures
+def test_semicolon_separator_keeps_each_row(browser, tmp_path):
+    """';' is a statement separator for llvm-mc x86 AT&T, so the line
+    after it keeps its own row and never the cmp row of the line above
+    (probe: 'GOT x86:cmp (i32, i32, i32) WANT x86:test (i32, i32)')."""
+    actual = _identify_doc(
+        browser, tmp_path, "\tcmpl %eax, %ecx\n; comment line\n\ttestl %eax, %ecx\n"
+    )
+    assert actual is not None and len(actual) == 3, actual
+    assert actual[0]["status"] == "row" and actual[0]["key"] == "x86:cmp (r32, r32)", actual
+    assert actual[1]["status"] == "no-row", actual  # llvm-mc's own error
+    assert actual[2]["status"] == "row" and actual[2]["key"] == "x86:test (r32, r32)", actual
+
+
+@requires_fixtures
+def test_trailing_blank_lines_keep_their_rows(browser, tmp_path):
+    """Trailing blank lines annotate nothing and the marker map keeps
+    them: without it the echo count mismatched and no line got a row
+    (probe: 'line mapping unverified (echo 3 vs source ...)')."""
+    actual = _identify_doc(browser, tmp_path, "\taddq %rax, %rbx\n\taddl %eax, %ecx\n\n\n")
+    assert actual is not None and len(actual) == 4, actual
+    assert actual[0]["status"] == "row" and actual[0]["key"] == "x86:add (r64, r64)", actual
+    assert actual[1]["status"] == "row" and actual[1]["key"] == "x86:add (r32, r32)", actual
+    assert actual[2]["status"] == "not-an-instruction" and actual[2]["reason"] == "blank", actual
+    assert actual[3]["status"] == "not-an-instruction" and actual[3]["reason"] == "blank", actual
+
+
+@requires_fixtures
+def test_fixup_and_mode_lines_get_no_row(browser, tmp_path):
+    """A fixup placeholder and a non-64-bit mode never decide a row."""
+    fixup = _identify_doc(
+        browser, tmp_path, "shll $symbol, %eax\naddl $symbol, %eax\n.set symbol, 2"
+    )
+    assert fixup is not None and len(fixup) == 3, fixup
+    for got in fixup[:2]:
+        assert got["status"] == "no-row" and "fixup" in got["reason"], fixup
+    mode16 = _identify_doc(browser, tmp_path, ".code16\nmovw %ax, %bx\npushw %ax")
+    assert mode16 is not None and len(mode16) == 3, mode16
+    for got in mode16[1:]:
+        assert got["status"] == "no-row" and "16-bit mode" in got["reason"], mode16
+
+
 @requires_fixtures
 def test_missing_worker_script_falls_back(browser, tmp_path):
     """With the shard present but identity.js missing, runAnnotate must
