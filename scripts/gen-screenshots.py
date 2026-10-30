@@ -35,7 +35,7 @@ from contextlib import closing, contextmanager
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-STATIC_FILES = ("index.html", "app.js", "style.css", "favicon.svg", "logo.svg")
+STATIC_FILES = ("index.html", "app.js", "lines.js", "style.css", "favicon.svg", "logo.svg")
 OUT_DIR = Path("/tmp")
 
 

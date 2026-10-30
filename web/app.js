@@ -1962,7 +1962,7 @@ let _identityWorker = null;
 let _identityInitError = null;
 
 function _newIdentityWorker(rows) {
-  const worker = new Worker("identity.js", { type: "module" });
+  const worker = new Worker("identity.js");  // classic: importScripts loads lines.js
   const state = { worker, seq: 0, pending: new Map(), ready: null };
   state.ready = new Promise((resolve) => {
     /* A script that fails to load (404, syntax error) fires onerror
@@ -2001,26 +2001,44 @@ async function resolveIdentityKeys(text, isa) {
   const rows = await loadEncodingsShard();
   if (!rows) return null;
   if (!_identityWorker) _identityWorker = _newIdentityWorker(rows);
-  if (!(await _identityWorker.ready)) return null;
-  const seq = ++_identityWorker.seq;
-  const reply = await new Promise((resolve) => {
-    _identityWorker.pending.set(seq, resolve);
-    _identityWorker.worker.postMessage({ type: "identify", seq, text, arch: cfg.arch });
-    /* shortcut: a dead worker posts no reply, so cap the wait and fall
-     * back to the name matcher; upgrade to liveness pings if a large
-     * document ever hits the deadline */
-    setTimeout(() => {
-      if (_identityWorker.pending.delete(seq)) {
-        _identityInitError = "identity worker timed out";
-        resolve({ type: "run-failed", error: _identityInitError });
-      }
+  const state = _identityWorker;
+  /* One deadline from request start for the whole wait (ready plus
+   * reply): a worker dying silently before ready never settles the
+   * ready promise, so ready alone hangs forever. On expiry the worker
+   * is terminated, any in-flight waits settle, and the old name
+   * matcher answers.
+   * shortcut: the same 60 s covers init and one identify; upgrade to
+   * liveness pings if a large document ever hits the deadline */
+  let timer = null;
+  const expired = new Promise((resolve) => {
+    timer = setTimeout(() => {
+      _identityInitError = "identity worker timed out";
+      if (_identityWorker === state) _identityWorker = null;
+      state.worker.terminate();
+      for (const slot of state.pending.values()) slot(null);
+      state.pending.clear();
+      resolve("expired");
     }, 60_000);
   });
-  if (reply.type !== "result") {
-    _identityInitError = reply.error || "identify failed";
-    return null;
+  try {
+    if ((await Promise.race([state.ready, expired])) !== true) return null;
+    const seq = ++state.seq;
+    const reply = await Promise.race([
+      new Promise((resolve) => {
+        state.pending.set(seq, resolve);
+        state.worker.postMessage({ type: "identify", seq, text, arch: cfg.arch });
+      }),
+      expired,
+    ]);
+    if (!reply || reply === "expired") return null;
+    if (reply.type !== "result") {
+      _identityInitError = reply.error || "identify failed";
+      return null;
+    }
+    return reply.results;
+  } finally {
+    clearTimeout(timer);
   }
-  return reply.results;
 }
 
 const instructionsByKey = Object.create(null);
@@ -2400,7 +2418,12 @@ async function runAnnotate() {
   status.textContent = "parsing…";
   buildInstructionsByMnem();
 
-  const lines = input.split("\n");
+  const lines = splitAsmLines(input);
+  /* splitAsmLines drops the phantom line after a trailing terminator
+   * (Python splitlines: the worker numbers only real lines). Re-add it
+   * so the rendered output keeps its trailing blank line; it parses
+   * as blank and no worker row joins to it. */
+  if (input === "" || input.endsWith("\n")) lines.push("");
   const parsed = lines.map(parseAsmLine);
   const mnems = new Set();
   for (const p of parsed) if (p.kind === "instruction") mnems.add(p.mnemonic.toUpperCase());

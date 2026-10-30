@@ -8,6 +8,8 @@
 
 "use strict";
 
+importScripts("lines.js");  // splitAsmLines: the line rule app.js shares
+
 /* The four binaries are release assets of the simd-labs/visualizer tag
  * wasm-v1 (its SHA256SUMS file lists these digests). The deploy copies
  * them into wasm-v1/ beside this file, so the fetch is same-origin:
@@ -679,11 +681,10 @@ function* zip(a, b) {
 }
 
 async function identifyDocument(tools, text, arch) {
-  /* Python splitlines() semantics (asm_identity.identify): \r\n, \r and
-   * the other line terminators end a line and never ride on it, and a
-   * document ending in a terminator has no phantom last line. */
-  const lines = text.split(/\r\n|[\n\r\x0b\x0c\x1c\x1d\x1e\x85\u2028\u2029]/);
-  if (lines[lines.length - 1] === "") lines.pop();
+  /* splitAsmLines (lines.js) numbers the lines exactly as app.js
+   * splits the document for rendering, so the rows join on the same
+   * line index. */
+  const lines = splitAsmLines(text);
   const probed = await probeLines(tools, lines, arch);
   const results = probed.map((entry) => ({
     n: entry.n,

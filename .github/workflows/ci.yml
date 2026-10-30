@@ -40,7 +40,7 @@ jobs:
           fi
 
       - name: node --check web/app.js
-        run: node --check web/app.js
+        run: node --check web/app.js && node --check web/lines.js && node --check web/identity.js
 
       - name: pytest
         run: python -m pytest -q

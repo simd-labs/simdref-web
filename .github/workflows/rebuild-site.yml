@@ -55,7 +55,7 @@ jobs:
         run: simdref export --out-dir _site
 
       - name: Assemble static files
-        run: cp web/index.html web/app.js web/identity.js web/style.css web/favicon.svg web/logo.svg _site/
+        run: cp web/index.html web/app.js web/lines.js web/identity.js web/style.css web/favicon.svg web/logo.svg _site/
 
       - name: Add byte-identity wasm tools
         # The site fetches these same-origin from wasm-v1/ (the release

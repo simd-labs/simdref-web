@@ -281,3 +281,75 @@ def test_sha256_mismatch_refuses_wasm(browser, tmp_path):
             assert "#" in page.locator("#ann-output").text_content()
         finally:
             page.close()
+
+
+@requires_fixtures
+def test_form_feed_keeps_the_line_map(browser, tmp_path):
+    """Sol CHECK2-integration probe, verbatim document: with a form feed
+    in it the page must split lines by the worker's rule, so the addl
+    and subq lines keep their own rows and the subq line never picks
+    the shifted addl row."""
+    site = tmp_path / "site"
+    _build_site(site, IDIR / "wasm")
+    port = _free_port()
+    with _serve(site, port):
+        page = browser.new_page()
+        try:
+            page.add_init_script("window.__simdrefWasmBase = location.origin + '/wasm-v1/';")
+            page.goto(f"http://127.0.0.1:{port}/")
+            page.wait_for_function("() => document.body.dataset.phase2 === 'done'", timeout=60_000)
+            keys = page.evaluate(
+                """async () => {
+                    const keys = [];
+                    const original = formatAnnotation;
+                    formatAnnotation = function (e, m, o) { keys.push(e.key); return original(e, m, o); };
+                    try {
+                        document.querySelector('#ann-input').value = 'addq %rax, %rbx\\n\\x0caddl %eax, %ecx\\nsubq %rcx, %rdx\\n';
+                        document.querySelector('#ann-isa').value = 'x86';
+                        await runAnnotate();
+                        return keys;
+                    } finally { formatAnnotation = original; }
+                }"""
+            )
+        finally:
+            page.close()
+    assert keys == ["x86:add (r64, r64)", "x86:add (r32, r32)", "x86:sub (r64, r64)"], keys
+
+
+@requires_fixtures
+def test_worker_death_before_ready_settles(browser, tmp_path):
+    """Sol CHECK2-init-death probe, verbatim worker body: a worker that
+    closes before posting ready must not hang Annotate. The deadline
+    from request start expires, the worker is terminated, and the old
+    name matcher answers."""
+    site = tmp_path / "site"
+    _build_site(site, IDIR / "wasm")
+    port = _free_port()
+    with _serve(site, port):
+        context = browser.new_context()
+        page = context.new_page()
+        try:
+            page.add_init_script("window.__simdrefWasmBase = location.origin + '/wasm-v1/';")
+            page.route(
+                "**/identity.js",
+                lambda route: route.fulfill(
+                    status=200,
+                    content_type="text/javascript",
+                    body="self.onmessage=()=>self.close();",
+                ),
+            )
+            page.goto(f"http://127.0.0.1:{port}/")
+            page.wait_for_function("() => document.body.dataset.phase2 === 'done'", timeout=60_000)
+            page.evaluate(
+                "() => { document.querySelector('#ann-input').value = 'addq %rax, %rbx';"
+                " document.querySelector('#ann-isa').value = 'x86';"
+                " window.__settled = false;"
+                " window.__run = runAnnotate().then(() => window.__settled = true); }"
+            )
+            page.wait_for_function("() => window.__settled === true", timeout=90_000)
+            status = page.locator("#ann-status").text_content()
+            assert "byte identity unavailable" in status, status
+            assert "#" in page.locator("#ann-output").text_content()
+        finally:
+            page.close()
+            context.close()
