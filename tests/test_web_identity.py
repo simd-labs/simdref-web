@@ -517,6 +517,38 @@ def test_multiline_string_warning_keeps_rows_f2(browser, tmp_path):
 
 
 @requires_fixtures
+@pytest.mark.parametrize(
+    "document,isa",
+    [
+        (
+            '.code16\nmovl foo@PLT, %eax\n.section "x\n.code64\ny","ax",@progbits\nmov %ax, %bx',
+            "x86",
+        ),
+        (
+            'call foo@plt; .section "x\n'
+            "add a0, a1, a2 # encoding: [0x82,0x80]\n"
+            'y","ax",@progbits # "\nret',
+            "riscv",
+        ),
+        (
+            'mov x0, #1; .section "x\n'
+            "sub x0, x1, x2 // encoding: [0x1f,0x20,0x03,0xd5]\n"
+            'y","ax",@progbits // "\nret',
+            "arm",
+        ),
+    ],
+    ids=["x86-plt-reloc", "riscv-plt-reloc", "aarch64-hash-immediate"],
+)
+def test_relocation_before_spanning_string_declines(browser, tmp_path, document, isa):
+    """The '@' of a relocation or '#' immediate is operand text, never a
+    comment (Sol r5 arch_injection, verbatim docs): the spanning .section
+    string exposes its fake assembly lines, so the document gets no byte
+    identity and the old matcher answers."""
+    actual = _identify_doc(browser, tmp_path, document, isa=isa)
+    assert actual is None, actual
+
+
+@requires_fixtures
 def test_one_line_string_keeps_byte_identity(browser, tmp_path):
     """Control: '.ascii \"ab\"' spans no line break, so byte identity
     still answers and the addq line keeps its row."""

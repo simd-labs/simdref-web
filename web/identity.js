@@ -725,7 +725,7 @@ async function identifyDocument(tools, text, arch) {
    * directive or a diagnostic (review F1: the fake .code64 flipped the
    * mode; review F2: the fake error declined the movq row). The whole
    * document gets no byte identity; the old matcher answers. */
-  if (asmHasSpanningString(text, arch === "aarch64")) return null;
+  if (asmHasSpanningString(text)) return null;
   const probed = await probeLines(tools, lines, arch);
   const results = probed.map((entry) => ({
     n: entry.n,
