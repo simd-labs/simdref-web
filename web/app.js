@@ -1991,6 +1991,20 @@ function _newIdentityWorker(rows) {
   return state;
 }
 
+/* Warm the identity worker when the page is idle after load: the shard
+ * fetch, the wasm download, the hash check and the compile then finish
+ * before the first Annotate instead of riding it. */
+function warmUpIdentity() {
+  if (typeof Worker === "undefined") return;
+  loadEncodingsShard().then((rows) => {
+    if (rows && !_identityWorker) _identityWorker = _newIdentityWorker(rows);
+  });
+}
+window.addEventListener("load", () => {
+  if (typeof requestIdleCallback === "function") requestIdleCallback(warmUpIdentity, { timeout: 3000 });
+  else setTimeout(warmUpIdentity, 3000);
+});
+
 /* The per-line identity of one document: an array of
  * { n, status, key, reason } (1-based lines), or null when byte
  * identity is unavailable (no shard, no Worker, tool init failed).
@@ -2418,40 +2432,38 @@ function syncInputScroll() {
   if (mirror) { mirror.scrollTop = ta.scrollTop; mirror.scrollLeft = ta.scrollLeft; }
 }
 
-async function runAnnotate() {
-  const input = $("ann-input").value;
-  const out   = $("ann-output");
-  const status = $("ann-status");
-  status.textContent = "parsing…";
-  buildInstructionsByMnem();
+/* The status line is base text plus the identity note, so the identity
+ * continuation refreshes the note after the base text landed. */
+let _annStatusBase = "";
+let _identityNote = "";
+function _renderAnnStatus() {
+  const el = $("ann-status");
+  if (el) el.textContent = _annStatusBase + _identityNote;
+}
 
-  const lines = splitAsmLines(input);
-  /* splitAsmLines drops the phantom line after a trailing terminator
-   * (Python splitlines: the worker numbers only real lines). Re-add it
-   * so the rendered output keeps its trailing blank line; it parses
-   * as blank and no worker row joins to it. */
-  if (input === "" || input.endsWith("\n")) lines.push("");
-  const parsed = lines.map(parseAsmLine);
+/* A document version: every annotate and every edit bumps it, so byte
+ * identity results arriving for an older document are dropped instead
+ * of overwriting the new text's rows. */
+let _annDocSeq = 0;
+
+/* One render pass over a parsed document. identityResults null renders
+ * the regex/width matcher (the site without identity data); an array
+ * upgrades every row to the byte-identity pick. docSeq guards the
+ * final write: a newer document owns the output. */
+async function renderAnnotateOutput(parsed, isa, identityResults, docSeq) {
+  const out = $("ann-output");
   const mnems = new Set();
   for (const p of parsed) if (p.kind === "instruction") mnems.add(p.mnemonic.toUpperCase());
-
-  const isa = $("ann-isa").value || "";
 
   /* Byte identity: one llvm-mc run per document when the encodings
    * shard is there. Per line, identityByLine holds the instruction
    * entry for the shard key (or null for no-row lines). */
   let identityByLine = null;
-  let identityNote = "";
-  if (IDENTITY_ISAS[isa]) {
-    const identityResults = await resolveIdentityKeys(input, isa);
-    if (identityResults) {
-      buildInstructionsByKey();
-      identityByLine = new Map();
-      for (const r of identityResults) {
-        identityByLine.set(r.n, r.key ? instructionsByKey[r.key] || null : null);
-      }
-    } else if (_identityInitError) {
-      identityNote = `; byte identity unavailable (${_identityInitError})`;
+  if (identityResults) {
+    buildInstructionsByKey();
+    identityByLine = new Map();
+    for (const r of identityResults) {
+      identityByLine.set(r.n, r.key ? instructionsByKey[r.key] || null : null);
     }
   }
 
@@ -2470,7 +2482,8 @@ async function runAnnotate() {
       for (const f of forms) prefixes.add(chunkPrefix(f.mnemonic));
     }
   }
-  status.textContent = `fetching ${prefixes.size} chunk${prefixes.size === 1 ? "" : "s"}…`;
+  _annStatusBase = `fetching ${prefixes.size} chunk${prefixes.size === 1 ? "" : "s"}…`;
+  _renderAnnStatus();
   await Promise.all([...prefixes].map(p => loadChunk(p)));
 
   // Build measurement cache keyed by instruction-record key.
@@ -2518,8 +2531,61 @@ async function runAnnotate() {
     known++;
     outLines.push(`${highlightAsm(p.raw, isa)}   <span class="hl-comment"># ${escAnn(annotation)}</span>`);
   }
+  if (docSeq !== _annDocSeq) return;  // a newer document annotated meanwhile
   out.innerHTML = outLines.join("\n");
-  status.textContent = `annotated ${known} / ${known + unknown} (${unknown} unknown)${identityNote}`;
+  _annStatusBase = `annotated ${known} / ${known + unknown} (${unknown} unknown)`;
+  _renderAnnStatus();
+}
+
+async function runAnnotate() {
+  const docSeq = ++_annDocSeq;
+  const input = $("ann-input").value;
+  _annStatusBase = "parsing…";
+  _renderAnnStatus();
+  buildInstructionsByMnem();
+
+  const lines = splitAsmLines(input);
+  /* splitAsmLines drops the phantom line after a trailing terminator
+   * (Python splitlines: the worker numbers only real lines). Re-add it
+   * so the rendered output keeps its trailing blank line; it parses
+   * as blank and no worker row joins to it. */
+  if (input === "" || input.endsWith("\n")) lines.push("");
+  const parsed = lines.map(parseAsmLine);
+
+  const isa = $("ann-isa").value || "";
+
+  /* Byte identity runs in the background: the old matcher renders at
+   * once and the rows upgrade in place when identity lands (the
+   * promise settling here also covers the upgrade, so a caller that
+   * awaits runAnnotate sees the settled state). */
+  let identityPromise = null;
+  if (IDENTITY_ISAS[isa]) {
+    _identityNote = "; byte identity preparing…";
+    identityPromise = resolveIdentityKeys(input, isa);
+  } else {
+    _identityNote = "";
+  }
+  const baseRender = renderAnnotateOutput(parsed, isa, null, docSeq);
+  if (!identityPromise) {
+    await baseRender;
+    return;
+  }
+  const upgrade = identityPromise.then(async (identityResults) => {
+    await baseRender;  // the old-matcher render never lands after the upgrade
+    if (docSeq !== _annDocSeq) return;
+    if (identityResults) {
+      _identityNote = "; byte identity ready";
+      await renderAnnotateOutput(parsed, isa, identityResults, docSeq);
+    } else {
+      /* No shard or no Worker reads exactly like the site without
+       * identity data (no note); the failure text stays. */
+      _identityNote = _identityInitError
+        ? `; byte identity unavailable (${_identityInitError})`
+        : "";
+      _renderAnnStatus();
+    }
+  });
+  await Promise.all([baseRender, upgrade]);
 }
 
 function outputAsText() {
@@ -2620,6 +2686,7 @@ function wireAnnotateTab() {
 
   $("ann-run").addEventListener("click", runAnnotate);
   $("ann-clear").addEventListener("click", () => {
+    _annDocSeq++;
     $("ann-input").value = "";
     $("ann-output").textContent = "";
     $("ann-status").textContent = "";
@@ -2652,6 +2719,7 @@ function wireAnnotateTab() {
   // Auto-annotate with debounce as the user types / pastes, and keep the
   // input's syntax-highlighted mirror in sync immediately.
   $("ann-input").addEventListener("input", () => {
+    _annDocSeq++;  // stale byte identity results drop at once, not at the next annotate
     syncInputHighlight();
     persistAnnotateInput();
     scheduleAutoAnnotate();

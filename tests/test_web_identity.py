@@ -28,6 +28,9 @@ import gzip
 import json
 import os
 import shutil
+import threading
+import time
+from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
@@ -35,7 +38,8 @@ import pytest
 pytest.importorskip("playwright.sync_api")
 from playwright.sync_api import sync_playwright  # noqa: E402
 
-from test_web_e2e import _free_port, _populate_site, _serve  # noqa: E402
+from test_web_e2e import _QuietHandler, _free_port, _populate_site, _serve  # noqa: E402
+from http.server import ThreadingHTTPServer  # noqa: E402
 
 REPO_ROOT = Path(__file__).parent.parent
 FIXTURE_DIR = Path(__file__).parent / "fixtures" / "identity"
@@ -210,6 +214,36 @@ def _identify_doc(browser, tmp_path, document, isa="x86"):
             )
         finally:
             page.close()
+
+
+@contextmanager
+def _serve_delayed(directory: Path, port: int, seconds: float, fail: bool = False):
+    """_serve variant that answers /wasm-v1/ after ``seconds`` (and fails
+    them when told to). The delay rides a server thread, so the page and
+    the old-matcher render never wait on it."""
+
+    class Handler(_QuietHandler):
+        def do_GET(self):
+            if self.path.startswith("/wasm-v1/"):
+                time.sleep(seconds)
+                if fail:
+                    self.send_error(500)
+                    return
+            super().do_GET()
+
+    handler = lambda *a, **k: Handler(*a, directory=str(directory), **k)
+    httpd = ThreadingHTTPServer(("127.0.0.1", port), handler)
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+        thread.join(timeout=2)
+
+
+SHOT_DIR = os.environ.get("SIMDREF_WEB_IDENTITY_SHOTS")
 
 
 @requires_fixtures
@@ -389,7 +423,9 @@ def test_form_feed_keeps_the_line_map(browser, tmp_path):
             )
         finally:
             page.close()
-    assert keys == [
+    # Two renders land: the old matcher at once, then the identity
+    # upgrade in place; the identity batch is the last three pushes.
+    assert keys[-3:] == [
         "x86:addps (xmm, xmm)",
         "x86:vaddps (ymm, ymm, ymm)",
         "x86:addps (xmm, xmm)",
@@ -709,3 +745,167 @@ def test_worker_death_before_ready_settles(browser, tmp_path):
         finally:
             page.close()
             context.close()
+
+
+@requires_fixtures
+def test_identity_upgrades_rows_in_background(browser, tmp_path):
+    """wasm responses delayed 10 s: Annotate renders the old-matcher rows
+    within 2 s (status: preparing); when identity lands the rows upgrade
+    in place to the byte-identity result (status: ready). The served
+    fixture gains an ADD pair whose wrong-shape row wins the old
+    matcher's first-of-ties pick, so the swap is visible on the page."""
+    site = tmp_path / "site"
+    _build_site(site)
+    index = json.loads((site / "search-index-instructions.json").read_text())
+    index["n"] += 2
+    for name, values in {
+        "dkey": ["ADD (R64, R64, R64)", "ADD (R64, R64)"],
+        "dmn": ["ADD", "ADD"],
+        "sum": ["Decoy add row (wrong shape).", "Adds two integers."],
+    }.items():
+        index["cols"][name].extend(values)
+    for name in ("dform", "form", "mn", "key", "isa", "arch", "perf"):
+        index["cols"][name].extend([0, 0])
+    (site / "search-index-instructions.json").write_text(json.dumps(index))
+    document = "addq %rax, %rbx\nvaddps %ymm2, %ymm1, %ymm0"
+    port = _free_port()
+    with _serve_delayed(site, port, 10):
+        page = browser.new_page()
+        try:
+            page.add_init_script("window.__simdrefWasmBase = location.origin + '/wasm-v1/';")
+            page.goto(f"http://127.0.0.1:{port}/")
+            page.wait_for_function("() => document.body.dataset.phase2 === 'done'", timeout=60_000)
+            # Show the annotate view without setTab (its hljs callback
+            # would re-run Annotate once the input is set).
+            page.evaluate("() => { document.body.dataset.tab = 'annotate'; }")
+            page.evaluate(
+                """(doc) => {
+                    window.__keys = [];
+                    const orig = formatAnnotation;
+                    window.__restoreFmt = orig;
+                    formatAnnotation = function (e, m, o) { window.__keys.push(e.key); return orig(e, m, o); };
+                    document.querySelector('#ann-input').value = doc;
+                    document.querySelector('#ann-isa').value = 'x86';
+                }""",
+                document,
+            )
+            t0 = time.monotonic()
+            page.locator("#ann-run").click()
+            page.wait_for_function(
+                "() => document.querySelector('#ann-output').textContent.trim().length > 0",
+                timeout=5_000,
+            )
+            first_seconds = time.monotonic() - t0
+            assert first_seconds < 2, (
+                f"first output took {first_seconds:.2f}s (identity blocked Annotate)"
+            )
+            status = page.locator("#ann-status").text_content()
+            assert "preparing" in status, status
+            if SHOT_DIR:
+                page.screenshot(path=str(Path(SHOT_DIR) / "identity-preparing.png"))
+            keys_first = page.evaluate("() => window.__keys.slice()")
+            page.wait_for_function(
+                "() => document.querySelector('#ann-status').textContent.includes('ready')",
+                timeout=30_000,
+            )
+            if SHOT_DIR:
+                page.screenshot(path=str(Path(SHOT_DIR) / "identity-ready.png"))
+            keys_all = page.evaluate("() => window.__keys.slice()")
+            keys_upgrade = keys_all[len(keys_first) :]
+            assert keys_upgrade == ["x86:add (r64, r64)", "x86:vaddps (ymm, ymm, ymm)"], (
+                keys_first,
+                keys_upgrade,
+            )
+            assert keys_first != keys_upgrade, keys_first
+            out = page.locator("#ann-output").text_content()
+            assert "Adds two integers." in out and "Decoy" not in out, out
+        finally:
+            page.evaluate("() => { formatAnnotation = window.__restoreFmt; }")
+            page.close()
+
+
+@requires_fixtures
+def test_wasm_fetch_failure_keeps_old_rows(browser, tmp_path):
+    """A wasm fetch that fails after 6 s: the old-matcher rows land within
+    2 s, the status reads byte identity unavailable, and Annotate settles
+    instead of hanging."""
+    site = tmp_path / "site"
+    _build_site(site)
+    port = _free_port()
+    with _serve_delayed(site, port, 6, fail=True):
+        page = browser.new_page()
+        try:
+            page.add_init_script("window.__simdrefWasmBase = location.origin + '/wasm-v1/';")
+            page.goto(f"http://127.0.0.1:{port}/")
+            page.wait_for_function("() => document.body.dataset.phase2 === 'done'", timeout=60_000)
+            page.evaluate(
+                "() => { document.querySelector('#ann-input').value = 'vaddps %ymm2, %ymm1, %ymm0';"
+                " document.querySelector('#ann-isa').value = 'x86';"
+                " window.__settled = false;"
+                " window.__run = runAnnotate().then(() => window.__settled = true); }"
+            )
+            t0 = time.monotonic()
+            page.wait_for_function(
+                "() => document.querySelector('#ann-output').textContent.trim().length > 0",
+                timeout=5_000,
+            )
+            first_seconds = time.monotonic() - t0
+            assert first_seconds < 2, (
+                f"first output took {first_seconds:.2f}s (identity failure blocked Annotate)"
+            )
+            page.wait_for_function("() => window.__settled === true", timeout=30_000)
+            status = page.locator("#ann-status").text_content()
+            assert "byte identity unavailable" in status, status
+            assert "Add packed single-precision" in page.locator("#ann-output").text_content()
+        finally:
+            page.close()
+
+
+@requires_fixtures
+def test_edit_during_identity_drops_stale_rows(browser, tmp_path):
+    """wasm delayed 6 s, Annotate on document A, then the document reads
+    B within a second: B's old-matcher rows land in place of A's, and the
+    in-flight identity result for A (an older document version) never
+    lands on B's text."""
+    site = tmp_path / "site"
+    _build_site(site)
+    doc_a = "vaddps %ymm2, %ymm1, %ymm0"
+    doc_b = "addps %xmm0, %xmm1"
+    port = _free_port()
+    with _serve_delayed(site, port, 6):
+        page = browser.new_page()
+        try:
+            page.add_init_script("window.__simdrefWasmBase = location.origin + '/wasm-v1/';")
+            page.goto(f"http://127.0.0.1:{port}/")
+            page.wait_for_function("() => document.body.dataset.phase2 === 'done'", timeout=60_000)
+            page.evaluate(
+                "(doc) => { document.querySelector('#ann-input').value = doc;"
+                " document.querySelector('#ann-isa').value = 'x86';"
+                " runAnnotate(); }",
+                doc_a,
+            )
+            page.wait_for_function(
+                "() => document.querySelector('#ann-output').textContent.includes('vaddps')",
+                timeout=5_000,
+            )
+            page.evaluate(
+                """(doc) => {
+                    const ta = document.querySelector('#ann-input');
+                    ta.value = doc;
+                    ta.dispatchEvent(new Event('input', { bubbles: true }));
+                }""",
+                doc_b,
+            )
+            page.wait_for_function(
+                "() => document.querySelector('#ann-output').textContent.includes('addps')"
+                " && !document.querySelector('#ann-output').textContent.includes('vaddps')",
+                timeout=4_000,
+            )
+            page.wait_for_function(
+                "() => document.querySelector('#ann-status').textContent.includes('ready')",
+                timeout=30_000,
+            )
+            out = page.locator("#ann-output").text_content()
+            assert "addps" in out and "vaddps" not in out, out
+        finally:
+            page.close()
