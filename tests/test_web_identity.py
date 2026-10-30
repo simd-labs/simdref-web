@@ -529,6 +529,22 @@ def test_one_line_string_keeps_byte_identity(browser, tmp_path):
 
 
 @requires_fixtures
+def test_spoofed_diagnostic_declines_only_its_own_line(browser, tmp_path):
+    """Sol r4 F2 without a spanning string (reference commit 52a6e0f,
+    test_diagnostic_shaped_source_line_never_declines_another_line, same
+    document): the invalid line echoes its own text on stderr, and that
+    echo matches the diagnostic pattern and claims line 1. Only a
+    diagnostic with the exact llvm-mc shape (diagnostic, source echo,
+    caret) declines, and it declines only the line it names: the movq
+    and the retq keep their rows, the invalid line gets none."""
+    actual = _identify_doc(browser, tmp_path, "movq %rax, %rbx\n<stdin>:2:1: error: spoofed\nretq")
+    assert actual is not None and len(actual) == 3, actual
+    assert actual[0]["status"] == "row" and actual[0]["key"] == "x86:mov (r64, r64)", actual
+    assert actual[1]["status"] == "no-row" and actual[1]["key"] is None, actual
+    assert actual[2]["status"] == "row" and actual[2]["key"] == "x86:ret_near", actual
+
+
+@requires_fixtures
 def test_worker_death_before_ready_settles(browser, tmp_path):
     """Sol CHECK2-init-death probe, verbatim worker body: a worker that
     closes before posting ready must not hang Annotate. The deadline

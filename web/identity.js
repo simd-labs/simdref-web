@@ -39,6 +39,8 @@ const ARCH_CFG = Object.freeze({
 
 const COMMENT_STARTS = ["#", "//", "/*", "@", ";"];
 const ERR_RE = /^<stdin>:(\d+):(\d+): (?:error|warning): (.*)$/;
+/* A real llvm-mc diagnostic block ends in a caret line ("^", "^~~~"). */
+const CARET_RE = /^[ ~]*\^+[~]*$/;
 /* The encoding comment llvm-mc appends ends its echo line. Requiring
  * the end keeps a string echo ('.ascii " # encoding: [0x90]"') from
  * faking bytes. */
@@ -515,11 +517,21 @@ async function probeLines(tools, lines, arch) {
   const run = await runMc(tools, args, work.join("\n") + "\n");
 
   /* Error lines number the marked document: 2i-1 is the marker of
-   * source line i, 2i is the source line itself. */
+   * source line i, 2i is the source line itself. Only the exact llvm-mc
+   * diagnostic shape counts: the diagnostic, the echo of the line it
+   * names, then the caret line. A source line or string text can print
+   * a diagnostic-shaped line of its own (review F2 without the span)
+   * and that must never decline another line. (asm_identity) */
   const errors = new Map();
-  for (const line of run.stderr.split("\n")) {
-    const m = ERR_RE.exec(line);
-    if (m && !errors.has(Number(m[1]))) errors.set(Number(m[1]), m[3]);
+  const stderrLines = run.stderr.split("\n");
+  for (let i = 0; i + 2 < stderrLines.length; i++) {
+    const m = ERR_RE.exec(stderrLines[i]);
+    if (!m) continue;
+    const claimed = Number(m[1]);
+    if (!(claimed > 0 && claimed <= work.length)) continue;
+    if (stderrLines[i + 1].trimEnd() !== work[claimed - 1].trimEnd()) continue;
+    if (!CARET_RE.test(stderrLines[i + 2])) continue;
+    if (!errors.has(claimed)) errors.set(claimed, m[3]);
   }
   const blocks = parseEchoBlocks(run.text);
 
