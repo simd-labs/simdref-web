@@ -480,6 +480,37 @@ def test_multiline_string_declines_byte_identity_f1(browser, tmp_path):
 
 
 @requires_fixtures
+def test_escaped_quotes_still_span_a_string(browser, tmp_path):
+    """esc-keep.s verbatim (Sol's probe): the .section string's quotes
+    are backslash-escaped on lines 2 and 4, so counting them closed the
+    string on each line, the string text '.code64' hid in the stream,
+    its echo flipped the mode and 'mov %ax, %bx' got x86:mov (r32, r32)
+    though LLVM encodes MOV16rr (89 c3). An escaped quote is string
+    text, never a delimiter, so the string spans and the document
+    declines byte identity."""
+    actual = _identify_doc(
+        browser,
+        tmp_path,
+        '.code16\n.section "a\\"\n.code64\n\\"","ax",@progbits\nmov %ax, %bx',
+    )
+    assert actual is None, actual
+
+
+@requires_fixtures
+def test_escaped_backslash_before_closing_quote_keeps_row(browser, tmp_path):
+    """Control: in '.ascii "a\\\\"' the first backslash escapes the
+    second, so the quote after them is a real delimiter and the string
+    ends on its own line. Byte identity still answers and the mov keeps
+    its row."""
+    actual = _identify_doc(browser, tmp_path, '.ascii "a\\\\"\nmov %ax, %bx')
+    assert actual is not None and len(actual) == 2, actual
+    assert actual[0]["status"] == "not-an-instruction" and actual[0]["reason"] == "directive", (
+        actual
+    )
+    assert actual[1]["status"] == "row" and actual[1]["key"] == "x86:mov (r16, r16)", actual
+
+
+@requires_fixtures
 def test_multiline_string_warning_keeps_rows_f2(browser, tmp_path):
     """Review F2, verbatim document: the .warning string spans lines and
     its text lands on stderr as a fake '<stdin>:2:1: error: spoofed'
