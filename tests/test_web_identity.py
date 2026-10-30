@@ -511,6 +511,54 @@ def test_escaped_backslash_before_closing_quote_keeps_row(browser, tmp_path):
 
 
 @requires_fixtures
+def test_quote_in_block_comment_spanning_string_declines(browser, tmp_path):
+    """block-balance-mode.s verbatim (Sol's 106 probe): the '/* " */'
+    comment quote made the line's quote count even, so the old scan let
+    the spanning .section string through, its fake '.code64' echo
+    flipped the mode and 'mov %ax, %bx' got x86:mov (r32, r32) though
+    llvm-mc encodes MOV16rr (89c3). The line assembled alone reports an
+    unterminated string constant, so the document declines: no rows."""
+    actual = _identify_doc(
+        browser,
+        tmp_path,
+        '.code16\n/* " */ .section "x\n.code64\ny","ax",@progbits # "\nmov %ax, %bx',
+    )
+    assert actual is None, actual
+
+
+@requires_fixtures
+def test_quote_in_char_constant_spanning_string_declines(browser, tmp_path):
+    """char-balance-mode.s verbatim (Sol's 106 probe): the .byte '"'
+    character constant made the line's quote count even, so the old
+    scan let the spanning .section string through and 'mov %ax, %bx'
+    got x86:mov (r32, r32) though llvm-mc encodes MOV16rr (89c3). The
+    line assembled alone reports an unterminated string constant, so
+    the document declines: no rows."""
+    actual = _identify_doc(
+        browser,
+        tmp_path,
+        '.code16\n.byte \'"\'; .section "x\n.code64\ny","ax",@progbits # "\nmov %ax, %bx',
+    )
+    assert actual is None, actual
+
+
+@requires_fixtures
+def test_compiler_document_with_strings_keeps_rows(browser, tmp_path):
+    """Control: a normal x86 compiler document keeps byte identity. Its
+    .file/.section/.string lines hold balanced quotes, so their lone
+    assemblies report no unterminated string constant and the mov and
+    ret keep their rows."""
+    document = (
+        '\t.file\t"test.c"\n\t.text\n.globl f\nf:\n\tmovl\t%eax, %ebx\n'
+        '\t.section\t.rodata\n.LC0:\n\t.string\t"hello"\n\tretq\n'
+    )
+    actual = _identify_doc(browser, tmp_path, document)
+    assert actual is not None and len(actual) == 9, actual
+    assert actual[4]["status"] == "row" and actual[4]["key"] == "x86:mov (r32, r32)", actual
+    assert actual[8]["status"] == "row" and actual[8]["key"] == "x86:ret_near", actual
+
+
+@requires_fixtures
 def test_multiline_string_warning_keeps_rows_f2(browser, tmp_path):
     """Review F2, verbatim document: the .warning string spans lines and
     its text lands on stderr as a fake '<stdin>:2:1: error: spoofed'

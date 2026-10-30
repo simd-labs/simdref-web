@@ -496,6 +496,47 @@ function mcArgs(arch) {
   return args;
 }
 
+/* llvm-mc's lexer names a string that the line end cuts off. Anchored
+ * to the diagnostic start: the lone line's stderr echoes the line's
+ * own text, and that echo must never pose as the diagnostic. */
+const UNTERM_STR_RE = /^<stdin>:\d+:\d+: error: unterminated string constant/m;
+
+/* Verdicts of the lone-line scan, per (arch, line text), for the
+ * worker's life: re-annotating one document reruns nothing. */
+const spanScanCache = new Map();
+
+/* A quoted string that spans a line break lands its text on its own
+ * lines in llvm-mc's listing or stderr, where it reads as a directive,
+ * an encoding line or a diagnostic (review F1: the fake .code64
+ * flipped the mode; review F2: the fake error declined the movq row).
+ * No textual scan sees it reliably: quotes in a comment (a block
+ * comment holding one quote) or a '"' character constant balance any
+ * quote count while the string still spans. So the assembler itself
+ * decides: each source line that holds a '"' assembles alone, and an
+ * unterminated string constant on that lone line means the string
+ * continues past the line break. The whole document then declines and
+ * the old matcher answers.
+ * Only that diagnostic declines: any other lone-line error (an .ascii
+ * whose argument the scan cut, a symbol line with a quote) keeps the
+ * document, because no string crosses the line break there. A lone
+ * line never suffers from error hiding of a multi-line scan, which is
+ * why the lines assemble one by one instead of .include'd in one run. */
+async function stringSpansLines(tools, lines, arch) {
+  const args = mcArgs(arch);
+  for (const line of lines) {
+    if (!line.includes('"')) continue;
+    const key = arch + "\0" + line;
+    let spans = spanScanCache.get(key);
+    if (spans === undefined) {
+      const run = await runMc(tools, args, line + "\n");
+      spans = UNTERM_STR_RE.test(run.stderr);
+      spanScanCache.set(key, spans);
+    }
+    if (spans) return true;
+  }
+  return false;
+}
+
 async function probeLines(tools, lines, arch) {
   const args = mcArgs(arch);
   /* The map comes from llvm-mc's own output, never from counting: a
@@ -720,12 +761,10 @@ async function identifyDocument(tools, text, arch) {
    * splits the document for rendering, so the rows join on the same
    * line index. */
   const lines = splitAsmLines(text);
-  /* A quoted string that spans a line break lands its text on its own
-   * lines in llvm-mc's listing or stderr, where it reads as a
-   * directive or a diagnostic (review F1: the fake .code64 flipped the
-   * mode; review F2: the fake error declined the movq row). The whole
-   * document gets no byte identity; the old matcher answers. */
-  if (asmHasSpanningString(text)) return null;
+  /* A quoted string that spans a line break breaks byte identity (see
+   * stringSpansLines): the whole document gets no byte identity and
+   * the old name matcher answers. */
+  if (await stringSpansLines(tools, lines, arch)) return null;
   const probed = await probeLines(tools, lines, arch);
   const results = probed.map((entry) => ({
     n: entry.n,
