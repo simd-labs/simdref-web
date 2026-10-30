@@ -72,7 +72,7 @@ def browser():
 
 
 @requires_fixtures
-@pytest.mark.parametrize("cls,isa", [("att", "x86"), ("a64", "arm")])
+@pytest.mark.parametrize("cls,isa", [("att", "x86"), ("a64", "arm"), ("riscv", "riscv")])
 def test_corpus_rows_match_asm_identity(browser, cls, isa, tmp_path):
     """Every corpus line gets the same catalog row as asm_identity."""
     site = tmp_path / "site"
@@ -135,6 +135,35 @@ def test_trailing_newline_keeps_identity(browser, tmp_path):
             page.close()
     assert actual is not None
     assert actual[0]["status"] == "row" and actual[0]["key"] == expected[0]["key"], actual[0]
+
+
+@requires_fixtures
+def test_crlf_and_form_feed_split_like_splitlines(browser, tmp_path):
+    """Line terminators never ride on the line (Python's splitlines()):
+    \r\n and a form feed split, so the per-line rows line up with the
+    document the user sees."""
+    site = tmp_path / "site"
+    _build_site(site, IDIR / "wasm")
+    expected = json.loads((IDIR / "expected-att.json").read_text())
+    texts = [expected[0]["text"], "\x0c", expected[1]["text"]]
+    document = "\r\n".join(texts) + "\r\n"
+    port = _free_port()
+    with _serve(site, port):
+        page = browser.new_page()
+        try:
+            page.add_init_script("window.__simdrefWasmBase = location.origin + '/wasm-v1/';")
+            page.goto(f"http://127.0.0.1:{port}/")
+            actual = page.evaluate(
+                "(args) => resolveIdentityKeys(args.text, args.isa)",
+                {"text": document, "isa": "x86"},
+            )
+        finally:
+            page.close()
+    assert actual is not None and len(actual) == 4, actual
+    assert actual[0]["status"] == "row" and actual[0]["key"] == expected[0]["key"], actual[0]
+    assert actual[1]["status"] == "not-an-instruction", actual[1]
+    assert actual[2]["status"] == "not-an-instruction", actual[2]
+    assert actual[3]["status"] == "row" and actual[3]["key"] == expected[1]["key"], actual[3]
 
 
 @requires_fixtures

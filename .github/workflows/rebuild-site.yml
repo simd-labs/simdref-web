@@ -57,6 +57,20 @@ jobs:
       - name: Assemble static files
         run: cp web/index.html web/app.js web/identity.js web/style.css web/favicon.svg web/logo.svg _site/
 
+      - name: Add byte-identity wasm tools
+        # The site fetches these same-origin from wasm-v1/ (the release
+        # download URL serves no CORS header). Verify each file against
+        # the release's own SHA256SUMS; identity.js pins the digests.
+        run: |
+          mkdir -p _site/wasm-v1
+          base=https://github.com/simd-labs/visualizer/releases/download/wasm-v1
+          curl -fsSL -o _site/wasm-v1/SHA256SUMS "$base/SHA256SUMS"
+          for f in llvm-mc.js llvm-mc.wasm xedform.cjs xedform.wasm; do
+            curl -fsSL -o "_site/wasm-v1/$f" "$base/$f"
+          done
+          cd _site/wasm-v1
+          grep -E ' (llvm-mc\.js|llvm-mc\.wasm|xedform\.cjs|xedform\.wasm)$' SHA256SUMS | sha256sum -c -
+
       - name: Test against the real export
         # The e2e suite normally runs against the committed fixture; here it
         # runs against this run's real `simdref export` output, so a core

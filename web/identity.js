@@ -9,19 +9,21 @@
 "use strict";
 
 /* The four binaries are release assets of the simd-labs/visualizer tag
- * wasm-v1 (its SHA256SUMS file lists these digests). The test suite
- * overrides the base through the init message so tests fetch nothing
- * from GitHub. */
-const WASM_BASE = "https://github.com/simd-labs/visualizer/releases/download/wasm-v1/";
+ * wasm-v1 (its SHA256SUMS file lists these digests). The deploy copies
+ * them into wasm-v1/ beside this file, so the fetch is same-origin:
+ * GitHub's release downloads carry no CORS header. The test suite
+ * overrides the base through the init message. */
+const WASM_BASE = "wasm-v1/";
 const WASM_SHA256 = Object.freeze({
   "llvm-mc.js": "f3d3526dac76c04d4514d873e205a1a4af7ae7ebd1b191298ace43fd314dd625",
   "llvm-mc.wasm": "43444c28e5d0da31a6521ca829fecf67bb4ea6c0cdb16b6ee413d119a85dc942",
   "xedform.cjs": "cf8f9238f270474a0b2c714c33c12470183bee8a4ee2e628ed9da25d9ec2d84b",
-  "xedform.wasm": "2793750aa3d7ab1ab2e5ee4a04443ac16bff701e6108ca763c66e26042164ba6",
+  "xedform.wasm": "3fea6b95674c29d16ca8e1da2d05888d96d47019dbfb0279df30aca335f3094e",
 });
 
-/* Kept in sync with asm_identity._ARCH_CFG (arm32 does no lookup there,
- * and the site has no arm32 selector). */
+/* Kept in sync with asm_identity._ARCH_CFG. The site has no arm32 and no
+ * riscv32 selector, so those two entries stay out (arm32 does no lookup
+ * in the reference either). */
 const ARCH_CFG = Object.freeze({
   x86: {
     triple: "x86_64-unknown-linux-gnu",
@@ -30,10 +32,8 @@ const ARCH_CFG = Object.freeze({
       "+avx,+avx2,+fma,+f16c,+bmi,+bmi2,+lzcnt,+movbe",
   },
   aarch64: { triple: "aarch64-unknown-linux-gnu", mattr: "+sve,+sve2,+sve2p1,+sme,+sme2,+sme2p1" },
-  riscv32: { triple: "riscv32-unknown-linux-gnu", mattr: "+m,+a,+f,+d,+c,+v,+zba,+zbb,+zbs" },
   riscv64: { triple: "riscv64-unknown-linux-gnu", mattr: "+m,+a,+f,+d,+c,+v,+zba,+zbb,+zbs" },
 });
-const X86_SYNTAX_FLAG = Object.freeze({ att: "-x86-asm-syntax=att", intel: "-x86-asm-syntax=intel" });
 
 const COMMENT_STARTS = ["#", "//", "/*", "@", ";"];
 const ERR_RE = /^<stdin>:(\d+):(\d+): (?:error|warning): (.*)$/;
@@ -411,16 +411,16 @@ function x86Pick(pool, d) {
 // document pipeline (asm_identity._probe_lines and friends)
 // --------------------------------------------------------------------
 
-function mcArgs(arch, syntax) {
+function mcArgs(arch) {
   const cfg = ARCH_CFG[arch];
   const args = [`--triple=${cfg.triple}`, "-show-encoding", "-show-inst"];
   if (cfg.mattr) args.push(`-mattr=${cfg.mattr}`);
-  if (arch === "x86") args.push(X86_SYNTAX_FLAG[syntax]);
+  if (arch === "x86") args.push("-x86-asm-syntax=att");
   return args;
 }
 
-async function probeLines(tools, lines, arch, syntax) {
-  const args = mcArgs(arch, syntax);
+async function probeLines(tools, lines, arch) {
+  const args = mcArgs(arch);
   const work = lines.slice();
   const errors = new Map();
   let stdout = "";
@@ -521,7 +521,6 @@ function identifyWords(probed, results, arch) {
       result.reason = "no catalog row";
     } else {
       result.reason = `ambiguous: ${keys.length} rows match the encoding`;
-      result.candidates = keys.slice();
     }
   }
 }
@@ -553,7 +552,6 @@ async function identifyX86(tools, probed, results) {
       result.reason = `no catalog row (splits emptied iform ${fact.iform})`;
     } else {
       result.reason = `ambiguous: ${rows.length} rows share iform ${fact.iform}`;
-      result.candidates = rows.map((r) => r.key);
     }
   }
 }
@@ -562,12 +560,13 @@ function* zip(a, b) {
   for (let i = 0; i < Math.min(a.length, b.length); i++) yield [a[i], b[i]];
 }
 
-async function identifyDocument(tools, text, arch, syntax) {
-  /* Python splitlines() semantics: the line terminator is implicit, so
-   * a document ending in "\n" has no phantom last line. */
-  const lines = text.split("\n");
+async function identifyDocument(tools, text, arch) {
+  /* Python splitlines() semantics (asm_identity.identify): \r\n, \r and
+   * the other line terminators end a line and never ride on it, and a
+   * document ending in a terminator has no phantom last line. */
+  const lines = text.split(/\r\n|[\n\r\x0b\x0c\x1c\x1d\x1e\x85\u2028\u2029]/);
   if (lines[lines.length - 1] === "") lines.pop();
-  const probed = await probeLines(tools, lines, arch, syntax);
+  const probed = await probeLines(tools, lines, arch);
   const results = probed.map((entry) => ({
     n: entry.n,
     text: entry.text,
@@ -579,7 +578,6 @@ async function identifyDocument(tools, text, arch, syntax) {
           ? entry.error || "rejected by llvm-mc"
           : "",
     key: null,
-    candidates: [],
   }));
   if (arch === "x86") await identifyX86(tools, probed, results);
   else identifyWords(probed, results, arch);
@@ -610,7 +608,7 @@ self.onmessage = async (event) => {
   }
   if (msg.type === "identify") {
     try {
-      const results = await identifyDocument(tools, msg.text, msg.arch, msg.syntax || "att");
+      const results = await identifyDocument(tools, msg.text, msg.arch);
       self.postMessage({ type: "result", seq: msg.seq, results });
     } catch (e) {
       self.postMessage({ type: "run-failed", seq: msg.seq, error: String(e && e.message || e) });

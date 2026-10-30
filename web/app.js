@@ -1943,9 +1943,9 @@ function buildInstructionsByMnem() {
  * src/simdref/asm_identity.py; this side only loads the shard, talks to
  * the worker and maps shard keys back to instruction entries. */
 const IDENTITY_ISAS = Object.freeze({
-  x86:   { arch: "x86", syntax: "att" },
-  arm:   { arch: "aarch64", syntax: "att" },  /* the Arm selector covers AArch64 assembly */
-  riscv: { arch: "riscv64", syntax: "att" },
+  x86:   { arch: "x86" },
+  arm:   { arch: "aarch64" },  /* the Arm selector covers AArch64 assembly */
+  riscv: { arch: "riscv64" },
 });
 
 let _encodingsShardPromise = null;
@@ -1970,6 +1970,10 @@ function _newIdentityWorker(rows) {
     worker.onerror = (e) => {
       _identityInitError = e.message || "identity.js failed to load";
       resolve(false);
+      /* A worker that dies with a request in flight posts nothing, so
+       * settle the pending annotates too instead of hanging. */
+      for (const slot of state.pending.values()) slot({ type: "run-failed", error: _identityInitError });
+      state.pending.clear();
     };
     worker.onmessage = (e) => {
       const m = e.data || {};
@@ -2001,7 +2005,16 @@ async function resolveIdentityKeys(text, isa) {
   const seq = ++_identityWorker.seq;
   const reply = await new Promise((resolve) => {
     _identityWorker.pending.set(seq, resolve);
-    _identityWorker.worker.postMessage({ type: "identify", seq, text, arch: cfg.arch, syntax: cfg.syntax });
+    _identityWorker.worker.postMessage({ type: "identify", seq, text, arch: cfg.arch });
+    /* shortcut: a dead worker posts no reply, so cap the wait and fall
+     * back to the name matcher; upgrade to liveness pings if a large
+     * document ever hits the deadline */
+    setTimeout(() => {
+      if (_identityWorker.pending.delete(seq)) {
+        _identityInitError = "identity worker timed out";
+        resolve({ type: "run-failed", error: _identityInitError });
+      }
+    }, 60_000);
   });
   if (reply.type !== "result") {
     _identityInitError = reply.error || "identify failed";
