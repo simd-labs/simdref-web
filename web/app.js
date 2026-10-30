@@ -2035,6 +2035,13 @@ async function resolveIdentityKeys(text, isa) {
       _identityInitError = reply.error || "identify failed";
       return null;
     }
+    /* The worker declines a document in which a quoted string spans a
+     * line break: no line gets byte identity and the old name matcher
+     * answers below. */
+    if (reply.results === null) {
+      _identityInitError = "a quoted string spans a line break";
+      return null;
+    }
     return reply.results;
   } finally {
     clearTimeout(timer);

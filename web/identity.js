@@ -708,6 +708,12 @@ async function identifyDocument(tools, text, arch) {
    * splits the document for rendering, so the rows join on the same
    * line index. */
   const lines = splitAsmLines(text);
+  /* A quoted string that spans a line break lands its text on its own
+   * lines in llvm-mc's listing or stderr, where it reads as a
+   * directive or a diagnostic (review F1: the fake .code64 flipped the
+   * mode; review F2: the fake error declined the movq row). The whole
+   * document gets no byte identity; the old matcher answers. */
+  if (asmHasSpanningString(text, arch === "aarch64")) return null;
   const probed = await probeLines(tools, lines, arch);
   const results = probed.map((entry) => ({
     n: entry.n,
@@ -751,6 +757,8 @@ self.onmessage = async (event) => {
   if (msg.type === "identify") {
     try {
       const results = await identifyDocument(tools, msg.text, msg.arch);
+      /* null: the worker declined the document (a quoted string spans
+       * lines); app.js falls back to the old name matcher. */
       self.postMessage({ type: "result", seq: msg.seq, results });
     } catch (e) {
       self.postMessage({ type: "run-failed", seq: msg.seq, error: String(e && e.message || e) });

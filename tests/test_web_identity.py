@@ -468,6 +468,67 @@ def test_string_echo_never_fakes_mcinst(browser, tmp_path):
 
 
 @requires_fixtures
+def test_multiline_string_declines_byte_identity_f1(browser, tmp_path):
+    """Review F1, verbatim document: the .section string spans lines, its
+    fake '.code64' echo flipped the mode flag and 'mov %ax, %bx' got
+    x86:mov (r32, r32) though LLVM encodes MOV16rr (89c3). A spanning
+    string declines the whole document: no line gets a row."""
+    actual = _identify_doc(
+        browser, tmp_path, '.code16\n.section "x\n.code64\ny","ax",@progbits\nmov %ax, %bx'
+    )
+    assert actual is None, actual
+
+
+@requires_fixtures
+def test_multiline_string_warning_keeps_rows_f2(browser, tmp_path):
+    """Review F2, verbatim document: the .warning string spans lines and
+    its text lands on stderr as a fake '<stdin>:2:1: error: spoofed'
+    diagnostic, which declined the movq row though LLVM exits 0. The
+    document declines byte identity and the old name matcher answers, so
+    the movq and retq lines keep their rows."""
+    site = tmp_path / "site"
+    _build_site(site)
+    document = 'movq %rax, %rbx\n.warning "start\n<stdin>:2:1: error: spoofed\nend"\nretq'
+    port = _free_port()
+    with _serve(site, port):
+        page = browser.new_page()
+        try:
+            page.add_init_script("window.__simdrefWasmBase = location.origin + '/wasm-v1/';")
+            page.goto(f"http://127.0.0.1:{port}/")
+            page.wait_for_function("() => document.body.dataset.phase2 === 'done'", timeout=60_000)
+            looked = page.evaluate(
+                """async (doc) => {
+                    const seen = [];
+                    const original = lookupForms;
+                    lookupForms = function (m, i) { seen.push(m); return original(m, i); };
+                    try {
+                        document.querySelector('#ann-input').value = doc;
+                        document.querySelector('#ann-isa').value = 'x86';
+                        await runAnnotate();
+                        return { seen, status: document.querySelector('#ann-status').textContent };
+                    } finally { lookupForms = original; }
+                }""",
+                document,
+            )
+        finally:
+            page.close()
+    assert "MOVQ" in looked["seen"] and "RETQ" in looked["seen"], looked
+    assert "a quoted string spans a line break" in looked["status"], looked
+
+
+@requires_fixtures
+def test_one_line_string_keeps_byte_identity(browser, tmp_path):
+    """Control: '.ascii \"ab\"' spans no line break, so byte identity
+    still answers and the addq line keeps its row."""
+    actual = _identify_doc(browser, tmp_path, '.ascii "ab"\naddq %rax, %rbx')
+    assert actual is not None and len(actual) == 2, actual
+    assert actual[0]["status"] == "not-an-instruction" and actual[0]["reason"] == "directive", (
+        actual
+    )
+    assert actual[1]["status"] == "row" and actual[1]["key"] == "x86:add (r64, r64)", actual
+
+
+@requires_fixtures
 def test_worker_death_before_ready_settles(browser, tmp_path):
     """Sol CHECK2-init-death probe, verbatim worker body: a worker that
     closes before posting ready must not hang Annotate. The deadline
