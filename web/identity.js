@@ -305,7 +305,7 @@ async function ensureMc(tools) {
  * bytes already landed in the JS chunk list. */
 const MC_OUT = "/simdref-mc.out";
 
-async function runMc(tools, args, text) {
+async function runMc(tools, args, text, files) {
   const { factory, compiled } = await ensureMc(tools);
   const errLines = [];
   const err = byteSink(errLines);
@@ -329,6 +329,8 @@ async function runMc(tools, args, text) {
   const module = await promise;
   await ready;
   module.FS.createDevice("/", "simdref-mc.out", null, (code) => outChunks.push(code));
+  /* files: [name, text] entries the run reads through .include. */
+  if (files) for (const [name, body] of files) module.FS.writeFile("/" + name, body);
   /* callMain unshifts thisProgram into the array; hand over a copy so
    * the caller's args survive the next pass unchanged. */
   const exit = module.callMain([...args, "-o", MC_OUT]);
@@ -501,7 +503,12 @@ function mcArgs(arch) {
  * own text, and that echo must never pose as the diagnostic. */
 const UNTERM_STR_RE = /^<stdin>:\d+:\d+: error: unterminated string constant/m;
 
-/* Verdicts of the lone-line scan, per (arch, line text), for the
+/* A diagnostic names the file that owns it, one source line per
+ * include file. A name no include owns (the top file, a forged echo)
+ * proves nothing and falls back to the lone-line rule. */
+const MC_BATCH_RE = /^(.+?):(\d+):(\d+): error: (.*)$/;
+
+/* Verdicts of the span scan, per (arch, line text), for the
  * worker's life: re-annotating one document reruns nothing. */
 const spanScanCache = new Map();
 
@@ -518,21 +525,91 @@ const spanScanCache = new Map();
  * the old matcher answers.
  * Only that diagnostic declines: any other lone-line error (an .ascii
  * whose argument the scan cut, a symbol line with a quote) keeps the
- * document, because no string crosses the line break there. A lone
- * line never suffers from error hiding of a multi-line scan, which is
- * why the lines assemble one by one instead of .include'd in one run. */
+ * document, because no string crosses the line break there.
+ * The verdicts stay per line, but the runs do not: one run per line
+ * cost ~20 ms each (instantiation dominated) and real compiler output
+ * holds hundreds of quoted lines. One run over a top file that
+ * .include's one FS file per line answers for all of them at once,
+ * because each line meets the lexer at its own file end exactly like
+ * its lone run. A parse error on one include can hide the later ones,
+ * so the sweep of a run's diagnostics stops at the first genuine line
+ * error: the lines before it decide, and the batch restarts behind it
+ * (cost = 1 + the erroring lines). Only the 'file number already
+ * allocated' run artifact sweeps on (it hides nothing; probe-include
+ * P-A). A diagnostic no include owns proves nothing: the lone-line
+ * rule decides the next line and the batch restarts behind it. */
 async function stringSpansLines(tools, lines, arch) {
   const args = mcArgs(arch);
+  const pending = [];
   for (const line of lines) {
     if (!line.includes('"')) continue;
     const key = arch + "\0" + line;
-    let spans = spanScanCache.get(key);
-    if (spans === undefined) {
-      const run = await runMc(tools, args, line + "\n");
-      spans = UNTERM_STR_RE.test(run.stderr);
-      spanScanCache.set(key, spans);
-    }
+    const spans = spanScanCache.get(key);
     if (spans) return true;
+    if (spans === undefined) pending.push(line);
+  }
+  if (!pending.length) return false;
+  const nonce = [...crypto.getRandomValues(new Uint8Array(4))]
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+  const names = pending.map((_, i) => `q_${nonce}_${i}.s`);
+  const owner = new Map(names.map((name, i) => [name, i]));
+  let start = 0;
+  while (start < pending.length) {
+    const files = [];
+    for (let i = start; i < pending.length; i++) files.push([names[i], pending[i] + "\n"]);
+    const top = files.map(([name]) => `.include "${name}"`).join("\n") + "\n";
+    const run = await runMc(tools, args, top, files);
+    /* Diagnostics arrive in parse order, one file's block at a time. */
+    const diags = [];
+    let unowned = false;
+    let last = start - 1;
+    for (const line of run.stderr.split("\n")) {
+      const m = MC_BATCH_RE.exec(line);
+      if (!m) continue;
+      const i = owner.get(m[1]);
+      if (i === undefined || i < start || i < last) {
+        unowned = true;
+        break;
+      }
+      if (i > last) {
+        diags.push({ i, msgs: [] });
+        last = i;
+      }
+      diags[diags.length - 1].msgs.push(m[4]);
+    }
+    let pos = start;
+    let restart = false;
+    for (const d of diags) {
+      const spans = d.msgs.some((msg) => msg.startsWith("unterminated string constant"));
+      for (let j = pos; j < d.i; j++) spanScanCache.set(arch + "\0" + pending[j], false);
+      spanScanCache.set(arch + "\0" + pending[d.i], spans);
+      if (spans) return true;
+      pos = d.i + 1;
+      /* 'file number already allocated' is a run artifact: two lines
+       * reuse one .file number, the line alone parses clean, and that
+       * directive-table error hides no later diagnostic (probe-include
+       * P-A). Any other error may hide later lines, so the batch
+       * restarts behind it. */
+      if (!d.msgs.every((msg) => msg === "file number already allocated")) {
+        restart = true;
+        break;
+      }
+    }
+    if (!restart && !unowned) {
+      for (let j = pos; j < pending.length; j++) spanScanCache.set(arch + "\0" + pending[j], false);
+      return false;
+    }
+    if (restart) {
+      start = pos;
+      continue;
+    }
+    /* The unowned diagnostic proves no line past pos, so the lone-line
+     * rule decides pending[pos] exactly and the batch restarts. */
+    const spans = UNTERM_STR_RE.test((await runMc(tools, args, pending[pos] + "\n")).stderr);
+    spanScanCache.set(arch + "\0" + pending[pos], spans);
+    if (spans) return true;
+    start = pos + 1;
   }
   return false;
 }

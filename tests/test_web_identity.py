@@ -543,6 +543,23 @@ def test_quote_in_char_constant_spanning_string_declines(browser, tmp_path):
 
 
 @requires_fixtures
+def test_lone_line_error_before_spanning_string_declines(browser, tmp_path):
+    """The .ascii line alone reports 'expected string' (no string
+    crosses its line break) and keeps the document, but the .section
+    line after it alone reports an unterminated string constant and
+    declines it. One batch run sees only the first error (it hides the
+    later include's error), so a scan that trusts one run's error set
+    keeps the document; the restart behind the first erroring line
+    declines it: no rows."""
+    actual = _identify_doc(
+        browser,
+        tmp_path,
+        '.ascii "cut\n.section "x\ny","ax",@progbits\nmov %ax, %bx',
+    )
+    assert actual is None, actual
+
+
+@requires_fixtures
 def test_compiler_document_with_strings_keeps_rows(browser, tmp_path):
     """Control: a normal x86 compiler document keeps byte identity. Its
     .file/.section/.string lines hold balanced quotes, so their lone
