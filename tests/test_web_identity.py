@@ -227,6 +227,53 @@ def test_fixup_and_mode_lines_get_no_row(browser, tmp_path):
 
 
 @requires_fixtures
+def test_mode_in_inactive_if_body_gets_no_row(browser, tmp_path):
+    """The .code64 sits in a skipped .if 0 body, so the movw assembles
+    in 16-bit mode (Sol's blocker P2 verbatim, asm_identity commit
+    c1c4c9b: the mode rides the llvm-mc output stream)."""
+    actual = _identify_doc(browser, tmp_path, ".code16\n.if 0\n.code64\n.endif\nmovw %ax, %bx")
+    assert actual is not None and len(actual) == 5, actual
+    assert actual[4]["status"] == "no-row" and "16-bit mode" in actual[4]["reason"], actual
+
+
+@requires_fixtures
+def test_mode_in_macro_body_gets_no_row(browser, tmp_path):
+    """The .code64 is macro body text only; the movw runs in 16-bit mode."""
+    actual = _identify_doc(browser, tmp_path, ".code16\n.macro up\n.code64\n.endm\nmovw %ax, %bx")
+    assert actual is not None and len(actual) == 5, actual
+    assert actual[4]["status"] == "no-row" and "16-bit mode" in actual[4]["reason"], actual
+
+
+@requires_fixtures
+def test_mode_in_comment_gets_no_row(browser, tmp_path):
+    """The .code64 is block-comment text; the movw runs in 16-bit mode."""
+    actual = _identify_doc(browser, tmp_path, ".code16\n/*\n.code64\n*/\nmovw %ax, %bx")
+    assert actual is not None and len(actual) == 5, actual
+    assert actual[4]["status"] == "no-row" and "16-bit mode" in actual[4]["reason"], actual
+
+
+@requires_fixtures
+def test_mode_after_semicolon_statement_gets_no_row(browser, tmp_path):
+    """The "; .code16" statement executes after the nop: the nop keeps its
+    row (64-bit mode) and the movw runs in 16-bit mode."""
+    actual = _identify_doc(browser, tmp_path, "nop; .code16\nmovw %ax, %bx")
+    assert actual is not None and len(actual) == 2, actual
+    assert actual[0]["status"] == "row", actual
+    assert actual[1]["status"] == "no-row" and "16-bit mode" in actual[1]["reason"], actual
+
+
+@requires_fixtures
+def test_mode_in_inactive_else_branch_gets_no_row(browser, tmp_path):
+    """The .code64 sits in the skipped .else branch; the movl runs in
+    32-bit mode (llvm-mc MOV32rr)."""
+    actual = _identify_doc(
+        browser, tmp_path, ".code16\n.if 1\n.code32\n.else\n.code64\n.endif\nmovl %eax, %ebx"
+    )
+    assert actual is not None and len(actual) == 7, actual
+    assert actual[6]["status"] == "no-row" and "32-bit mode" in actual[6]["reason"], actual
+
+
+@requires_fixtures
 def test_missing_worker_script_falls_back(browser, tmp_path):
     """With the shard present but identity.js missing, runAnnotate must
     fall back to name matching instead of hanging on the worker."""

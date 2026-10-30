@@ -45,7 +45,10 @@ const CONT_RE = /^\s+(#|\/\/|@|;)/;
 const LABEL_RE = /^[\w.$]+:/;
 const BYTE_RE = /^0x([0-9a-fA-F]{2})(?:'A')?$/;
 const BITS_RE = /^0b([01Aa]{8})$/;
-const MODE_DIR_RE = /^\.(code16gcc|code16|code32|code64)\b/;
+/* One x86 mode flag; the output re-emits it when the assembler executes
+ * it. The lookahead keeps a label named ".code16:" from reading as a
+ * flag. */
+const MODE_DIR_RE = /^\.(code16gcc|code16|code32|code64)(?=\s|$)/;
 const MODE_BITS = Object.freeze({ code16: "16", code16gcc: "16", code32: "32", code64: "64" });
 
 /* uops.info eosz attribute values per effective operand size. */
@@ -135,30 +138,25 @@ function classifyLine(text) {
   return null;
 }
 
-/* asm_identity._x86_modes: the mode llvm-mc assembles each line in.
- * `.code16`/`.code16gcc`/`.code32`/`.code64` switch it; the x86_64
- * triple starts at 64. */
-function x86Modes(lines) {
-  let mode = "64";
-  return lines.map((text) => {
-    let stripped = text.trim();
-    const label = LABEL_RE.exec(stripped);
-    if (label) stripped = stripped.slice(label[0].length).trim();
-    const found = MODE_DIR_RE.exec(stripped);
-    if (found) mode = MODE_BITS[found[1]];
-    return mode;
-  });
-}
-
 function parseEchoBlocks(stdout) {
   const blocks = [];
+  /* Each block also carries the mode llvm-mc assembled it in: the output
+   * stream re-emits every active `.code` flag in execution order (a flag
+   * in an `.if 0` body, a macro body or a comment does not emit), so the
+   * mode comes from what the assembler did, never from the source text.
+   * The x86_64 triple starts at 64. (asm_identity._parse_echo_blocks) */
+  let mode = "64";
   for (const line of stdout.split("\n")) {
     /* Continuation lines carry the encoding/MCInst info of the block
      * above them; only a fresh echo line opens a new block. The echo
      * text marks the block: the line-marker labels echo back here. */
     const cont = CONT_RE.test(line);
+    if (!cont) {
+      const m = MODE_DIR_RE.exec(line.trim());
+      if (m) mode = MODE_BITS[m[1]];
+    }
     if (!cont || !blocks.length) {
-      blocks.push({ echo: cont ? "" : line.trimEnd(), opcode: null, bytes: null });
+      blocks.push({ echo: cont ? "" : line.trimEnd(), opcode: null, bytes: null, mode });
     }
     const block = blocks[blocks.length - 1];
     if (block.opcode === null) {
@@ -531,7 +529,7 @@ async function probeLines(tools, lines, arch) {
       return { n, text, status: "NOT-AN-INSTRUCTION", kind };
     }
     if (enc.length === 1 && proven) {
-      return { n, text, status: "OK", bytes: enc[0].bytes, opcode: enc[0].opcode };
+      return { n, text, status: "OK", bytes: enc[0].bytes, opcode: enc[0].opcode, mode: enc[0].mode };
     }
     if (!enc.length && kind !== null) return { n, text, status: "NOT-AN-INSTRUCTION", kind };
     if (!enc.length && bucket.length === 1) {
@@ -620,11 +618,11 @@ function identifyWords(probed, results, arch) {
 // With covered = 0 the match test is (word & mask) === match again, so
 // the covered-aware filter needs no separate fast path.
 
-async function identifyX86(tools, probed, results, modes) {
+async function identifyX86(tools, probed, results) {
   const pending = [];
   for (const [entry, result] of zip(probed, results)) {
     if (entry.status !== "OK") continue;
-    const mode = modes[entry.n - 1];
+    const mode = entry.mode;
     /* The decoder runs in 64-bit mode (audit B1); a line another mode
      * encodes decodes to the wrong facts, so it reports no row. */
     if (mode !== "64") {
@@ -698,7 +696,7 @@ async function identifyDocument(tools, text, arch) {
           : "",
     key: null,
   }));
-  if (arch === "x86") await identifyX86(tools, probed, results, x86Modes(lines));
+  if (arch === "x86") await identifyX86(tools, probed, results);
   else identifyWords(probed, results, arch);
   return results;
 }
