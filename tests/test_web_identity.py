@@ -422,6 +422,52 @@ def test_print_pollution_keeps_64bit_row(browser, tmp_path):
 
 
 @requires_fixtures
+def test_assignment_echo_never_sets_mode(browser, tmp_path):
+    """The reference fix's second site: '.set .code64, 1' echoes
+    '.code64 = 1', and that assignment text must never read as a mode
+    flag, in either direction (asm_identity commit 5c47efc,
+    test_assignment_print_never_sets_the_mode, same document)."""
+    stuck = _identify_doc(browser, tmp_path, ".code16\n.set .code64, 1\nmovw %ax, %bx")
+    assert stuck is not None and len(stuck) == 3, stuck
+    assert stuck[2]["status"] == "no-row" and "16-bit mode" in stuck[2]["reason"], stuck
+    kept = _identify_doc(browser, tmp_path, ".set .code16, 1\naddq %rax, %rbx")
+    assert kept is not None and len(kept) == 2, kept
+    assert kept[1]["status"] == "row" and kept[1]["key"] == "x86:add (r64, r64)", kept
+
+
+@requires_fixtures
+def test_string_echo_never_fakes_bytes(browser, tmp_path):
+    """The reference fix's third site: a macro expanding to .ascii puts
+    the string's echo text in the call line's block; its fake
+    'encoding: [0xc3]' must never give the call line the ret row
+    (asm_identity commit 5c47efc,
+    test_string_echo_never_fakes_an_encoding_comment, same document)."""
+    doc = '.macro m\n.ascii " # encoding: [0xc3]"\n.endm\nm\nretq'
+    actual = _identify_doc(browser, tmp_path, doc)
+    assert actual is not None and len(actual) == 5, actual
+    assert actual[3]["status"] != "row" and actual[3]["key"] is None, actual[3]
+    # control: the real retq keeps its row
+    assert actual[4]["status"] == "row" and actual[4]["key"] == "x86:ret_near", actual[4]
+
+
+@requires_fixtures
+def test_string_echo_never_fakes_mcinst(browser, tmp_path):
+    """One string carries both fake bytes and a fake MCInst that names
+    the other tie row; neither decides (asm_identity commit 5c47efc,
+    test_string_echo_never_fakes_an_mcinst_line, same document)."""
+    doc = (
+        ".macro m\n"
+        '.ascii " # encoding: [0xaf,0x22,0x00,0x10] # <MCInst #0 LR_W_AQ x"\n'
+        ".endm\nm\nlr.w a0, (a1)"
+    )
+    actual = _identify_doc(browser, tmp_path, doc, isa="riscv")
+    assert actual is not None and len(actual) == 5, actual
+    assert actual[3]["status"] != "row" and actual[3]["key"] is None, actual[3]
+    # control: the real lr.w keeps lr.w, never the fake's lr.w.aq
+    assert actual[4]["status"] == "row" and actual[4]["key"] == "riscv:lr.w", actual[4]
+
+
+@requires_fixtures
 def test_worker_death_before_ready_settles(browser, tmp_path):
     """Sol CHECK2-init-death probe, verbatim worker body: a worker that
     closes before posting ready must not hang Annotate. The deadline

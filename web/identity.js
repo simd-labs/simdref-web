@@ -39,16 +39,24 @@ const ARCH_CFG = Object.freeze({
 
 const COMMENT_STARTS = ["#", "//", "/*", "@", ";"];
 const ERR_RE = /^<stdin>:(\d+):(\d+): (?:error|warning): (.*)$/;
-const ENC_RE = /encoding: \[([^\]]*)\]/;
-const INST_RE = /<MCInst #\d+ (\S+)/;
+/* The encoding comment llvm-mc appends ends its echo line. Requiring
+ * the end keeps a string echo ('.ascii " # encoding: [0x90]"') from
+ * faking bytes. */
+const ENC_RE = /encoding: \[([^\]]*)\]\s*$/;
+/* The MCInst dump is a comment continuation line. Requiring the line
+ * start keeps a string echo from faking the opcode (RV tie-break
+ * input). */
+const INST_RE = /^\s*# <MCInst #\d+ (\S+)/;
 const CONT_RE = /^\s+(#|\/\/|@|;)/;
 const LABEL_RE = /^[\w.$]+:/;
 const BYTE_RE = /^0x([0-9a-fA-F]{2})(?:'A')?$/;
 const BITS_RE = /^0b([01Aa]{8})$/;
 /* One x86 mode flag; the output re-emits it when the assembler executes
- * it. The lookahead keeps a label named ".code16:" from reading as a
- * flag. */
-const MODE_DIR_RE = /^\.(code16gcc|code16|code32|code64)(?=\s|$)/;
+ * it. Only the bare echo counts: a label (".code16:") and a symbol
+ * assignment print (".code16 = 1", from '.set .code16, 1') echo
+ * user-chosen names at the line start in the same stream, and user text
+ * must never set the mode. */
+const MODE_DIR_RE = /^\.(code16gcc|code16|code32|code64)$/;
 const MODE_BITS = Object.freeze({ code16: "16", code16gcc: "16", code32: "32", code64: "64" });
 
 /* uops.info eosz attribute values per effective operand size. */
