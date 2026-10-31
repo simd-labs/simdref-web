@@ -933,7 +933,8 @@ button.perf-line { background: none; border: none; padding: 0; text-align: left;
 /* E1: results-or-detail, one at a time (mobile) */
 #back-results { display: none; }
 @media (max-width: 768px) {
-  .layout { display: block; }
+  /* Mobile page scroll: reset the fixed-height clip .layout has on desktop. */
+  .layout { display: block; height: auto; overflow: visible; }
   body:not([data-mobile-view="detail"]) .detail-panel:not(:has(.detail-empty)) { display: none; }
   body[data-mobile-view="detail"] .results-panel { display: none; }
   body[data-mobile-view="detail"] #back-results { display: block; position: sticky; top: 0; z-index: 2; }

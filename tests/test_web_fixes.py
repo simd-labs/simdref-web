@@ -151,6 +151,66 @@ def test_f3_no_horizontal_overflow_at_390(browser, site):
         page.close()
 
 
+# iPhone 13, per Playwright's device descriptor.
+IPHONE_13 = {
+    "user_agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) "
+    "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Mobile/15E148 Safari/604.1",
+    "viewport": {"width": 390, "height": 844},
+    "device_scale_factor": 3,
+    "is_mobile": True,
+    "has_touch": True,
+}
+
+
+def test_mobile_search_view_scrolls_with_touch(browser, site):
+    """M1: on a phone a touch swipe must scroll the Search view. The desktop
+    rule `.layout { height: calc(100vh - 90px); overflow: hidden }` clipped
+    the page on mobile, so only the inner results list scrolled and the
+    document itself never moved. The fixture's few 'add' rows fit one
+    screen, so the test clones them until the document outgrows the
+    viewport."""
+    _, url = site
+    context = browser.new_context(**IPHONE_13)
+    page = context.new_page()
+    try:
+        page.goto(url)
+        page.locator("#query").fill("add")
+        page.wait_for_function("document.querySelectorAll('#results .result').length > 0")
+        page.evaluate(
+            """() => {
+                const list = document.querySelector('#results');
+                const rows = Array.from(list.children);
+                for (let i = 0; i < 24; i++)
+                    rows.forEach(r => list.appendChild(r.cloneNode(true)));
+            }"""
+        )
+        taller = page.evaluate("document.scrollingElement.scrollHeight > window.innerHeight + 100")
+        assert taller, (
+            "document is not taller than the screen: the layout clip from the "
+            "desktop .layout rule is still active"
+        )
+        cdp = context.new_cdp_session(page)
+        x, y0, y1 = 195, int(844 * 0.75), int(844 * 0.2)
+        cdp.send(
+            "Input.dispatchTouchEvent",
+            {"type": "touchStart", "touchPoints": [{"x": x, "y": y0, "id": 1}]},
+        )
+        for i in range(1, 13):
+            cdp.send(
+                "Input.dispatchTouchEvent",
+                {
+                    "type": "touchMove",
+                    "touchPoints": [{"x": x, "y": y0 + (y1 - y0) * i // 12, "id": 1}],
+                },
+            )
+        cdp.send("Input.dispatchTouchEvent", {"type": "touchEnd", "touchPoints": []})
+        page.wait_for_timeout(400)
+        top = page.evaluate("document.scrollingElement.scrollTop")
+        assert top > 0, f"touch swipe left the document at scrollTop={top}"
+    finally:
+        context.close()
+
+
 def _goto_addps_detail(page, url):
     page.goto(url)
     # '(xmm, xmm)' form; the plain 'addps' query ranks the (xmm, m128)
