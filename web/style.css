@@ -756,7 +756,11 @@ a:hover { text-decoration: underline; }
   font-weight: 500;
 }
 .tab-btn:hover { background: var(--surface-hover); color: var(--text); }
-.tab-btn[aria-selected="true"] {
+/* The pill highlight reads the same body[data-tab] bit that shows the
+ * view: aria-selected alone drifts from the view on paths that flip the
+ * view bit directly (screenshot captures set body.dataset.tab). */
+body:not([data-tab="annotate"]) #tab-search,
+body[data-tab="annotate"] #tab-annotate {
   background: var(--accent-soft);
   color: var(--accent);
   border-color: var(--border);

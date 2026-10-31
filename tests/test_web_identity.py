@@ -942,3 +942,33 @@ def test_edit_during_identity_drops_stale_rows(browser, tmp_path):
             assert "addps" in out and "vaddps" not in out, out
         finally:
             page.close()
+
+
+@requires_fixtures
+def test_annotate_view_highlights_its_own_nav_pill(browser, tmp_path):
+    """The captures in this module show the annotate view by setting
+    body[data-tab] directly (setTab's hljs callback re-runs Annotate
+    once the input is set), and every such capture showed the Search
+    pill lit. The pill highlight must read the same body[data-tab] bit
+    that decides the view. With the old aria-selected-driven rule the
+    Search pill keeps its accent background here."""
+    site = tmp_path / "site"
+    _build_site(site)
+    port = _free_port()
+    with _serve(site, port):
+        page = browser.new_page()
+        try:
+            page.add_init_script("window.__simdrefWasmBase = location.origin + '/wasm-v1/';")
+            page.goto(f"http://127.0.0.1:{port}/")
+            page.wait_for_function("() => document.body.dataset.phase2 === 'done'", timeout=60_000)
+            bg = "() => { const get = id => getComputedStyle(document.getElementById(id)).backgroundColor; return [get('tab-search'), get('tab-annotate')]; }"
+            # The direct view flip the captures use: the pill follows it.
+            page.evaluate("() => { document.body.dataset.tab = 'annotate'; }")
+            search_bg, ann_bg = page.evaluate(bg)
+            assert search_bg == "rgba(0, 0, 0, 0)" and ann_bg != search_bg, (search_bg, ann_bg)
+            # Control: the real click path highlights the same way back.
+            page.click("#tab-search")
+            search_bg, ann_bg = page.evaluate(bg)
+            assert ann_bg == "rgba(0, 0, 0, 0)" and search_bg != ann_bg, (search_bg, ann_bg)
+        finally:
+            page.close()
