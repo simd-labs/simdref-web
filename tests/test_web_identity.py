@@ -972,3 +972,80 @@ def test_annotate_view_highlights_its_own_nav_pill(browser, tmp_path):
             assert ann_bg == "rgba(0, 0, 0, 0)" and search_bg != ann_bg, (search_bg, ann_bg)
         finally:
             page.close()
+
+
+@requires_fixtures
+def test_clear_keeps_the_identity_status(browser, tmp_path):
+    """wasm responses held by route interception: annotate once so a
+    status base is set, then Clear while the warm-up worker still
+    prepares. Clear shows the current identity state (preparing, then
+    ready when the warm-up settles), because Clear goes through the
+    shared status render. The previous Clear blanked the span directly,
+    and the warm-up's settle then skipped the rewrite, because a base
+    existed."""
+    site = tmp_path / "site"
+    _build_site(site)
+    port = _free_port()
+    held = []
+
+    def release_held(ctx):
+        try:
+            ctx.unroute("**/wasm-v1/*")
+        except Exception:
+            pass
+        while held:
+            try:
+                held.pop().continue_()
+            except Exception:
+                break
+
+    with _serve(site, port):
+        # A dedicated Worker's fetches bypass page.route here; the
+        # browser-context route holds them instead.
+        context = browser.new_context()
+        page = context.new_page()
+        try:
+            page.add_init_script("window.__simdrefWasmBase = location.origin + '/wasm-v1/';")
+
+            def hold(route):
+                held.append(route)
+
+            context.route("**/wasm-v1/*", hold)
+            page.goto(f"http://127.0.0.1:{port}/")
+            page.wait_for_function("() => document.body.dataset.phase2 === 'done'", timeout=60_000)
+            page.evaluate("() => { document.body.dataset.tab = 'annotate'; }")
+            page.wait_for_function(
+                "() => document.querySelector('#ann-status').textContent.includes('preparing')",
+                timeout=15_000,
+            )
+            # The worker starts fetching the wasm a beat after the note.
+            # The sync driver runs route handlers only while the main
+            # thread is inside a Playwright call, so gate on evaluate.
+            deadline = time.monotonic() + 15
+            while not held and time.monotonic() < deadline:
+                page.evaluate("() => void 0")
+            assert held, "wasm requests were never intercepted"
+            page.evaluate(
+                "() => { document.querySelector('#ann-input').value = 'addq %rax, %rbx';"
+                " document.querySelector('#ann-isa').value = 'x86';"
+                " runAnnotate(); }"
+            )
+            page.wait_for_function(
+                "() => document.querySelector('#ann-status').textContent.includes('annotated')",
+                timeout=15_000,
+            )
+            page.locator("#ann-clear").click()
+            status = page.locator("#ann-status").text_content()
+            assert "preparing" in status and "annotated" not in status, status
+            assert page.locator("#ann-output").text_content() == ""
+            # Release the wasm: the warm-up settle rewrites the span even
+            # though an Annotate ran (a base existed before Clear).
+            release_held(context)
+            page.wait_for_function(
+                "() => document.querySelector('#ann-status').textContent.includes('ready')",
+                timeout=60_000,
+            )
+        finally:
+            release_held(context)
+            page.close()
+            context.close()

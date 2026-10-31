@@ -2704,7 +2704,11 @@ function wireAnnotateTab() {
     _annDocSeq++;
     $("ann-input").value = "";
     $("ann-output").textContent = "";
-    $("ann-status").textContent = "";
+    /* Clear goes through the shared render so the span keeps showing
+     * the current identity state (preparing / ready / unavailable) and
+     * the warm-up settle can still rewrite it while it prepares. */
+    _annStatusBase = "";
+    _renderAnnStatus();
     syncInputHighlight();
   });
   $("ann-copy").addEventListener("click", async () => {
