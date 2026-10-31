@@ -1993,11 +1993,26 @@ function _newIdentityWorker(rows) {
 
 /* Warm the identity worker when the page is idle after load: the shard
  * fetch, the wasm download, the hash check and the compile then finish
- * before the first Annotate instead of riding it. */
+ * before the first Annotate instead of riding it. The status span
+ * announces the run so the page never looks stuck while it prepares. */
 function warmUpIdentity() {
   if (typeof Worker === "undefined") return;
   loadEncodingsShard().then((rows) => {
-    if (rows && !_identityWorker) _identityWorker = _newIdentityWorker(rows);
+    if (!rows || _identityWorker) return;
+    _identityNote = "byte identity preparing…";
+    _renderAnnStatus();
+    const state = (_identityWorker = _newIdentityWorker(rows));
+    state.ready.then((ok) => {
+      /* An Annotate that already ran (status base is set) owns the
+       * note: announcing it here would pre-empt the settle text of its
+       * own identity pass. And a timed-out worker was replaced by
+       * runAnnotate, whose settle path owns the note too. */
+      if (_identityWorker !== state || _annStatusBase !== "") return;
+      _identityNote = ok
+        ? "byte identity ready"
+        : `byte identity unavailable (${_identityInitError || "init failed"})`;
+      _renderAnnStatus();
+    });
   });
 }
 window.addEventListener("load", () => {
@@ -2438,7 +2453,7 @@ let _annStatusBase = "";
 let _identityNote = "";
 function _renderAnnStatus() {
   const el = $("ann-status");
-  if (el) el.textContent = _annStatusBase + _identityNote;
+  if (el) el.textContent = _annStatusBase + (_annStatusBase && _identityNote ? "; " : "") + _identityNote;
 }
 
 /* A document version: every annotate and every edit bumps it, so byte
@@ -2560,7 +2575,7 @@ async function runAnnotate() {
    * awaits runAnnotate sees the settled state). */
   let identityPromise = null;
   if (IDENTITY_ISAS[isa]) {
-    _identityNote = "; byte identity preparing…";
+    _identityNote = "byte identity preparing…";
     identityPromise = resolveIdentityKeys(input, isa);
   } else {
     _identityNote = "";
@@ -2574,13 +2589,13 @@ async function runAnnotate() {
     await baseRender;  // the old-matcher render never lands after the upgrade
     if (docSeq !== _annDocSeq) return;
     if (identityResults) {
-      _identityNote = "; byte identity ready";
+      _identityNote = "byte identity ready";
       await renderAnnotateOutput(parsed, isa, identityResults, docSeq);
     } else {
       /* No shard or no Worker reads exactly like the site without
        * identity data (no note); the failure text stays. */
       _identityNote = _identityInitError
-        ? `; byte identity unavailable (${_identityInitError})`
+        ? `byte identity unavailable (${_identityInitError})`
         : "";
       _renderAnnStatus();
     }

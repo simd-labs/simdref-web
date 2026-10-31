@@ -825,6 +825,39 @@ def test_identity_upgrades_rows_in_background(browser, tmp_path):
 
 
 @requires_fixtures
+def test_warmup_shows_identity_preparing_before_annotate(browser, tmp_path):
+    """The idle warm-up announces itself on the Annotate view before any
+    Annotate click: wasm responses delayed 10 s, the status reads
+    'byte identity preparing…' while the worker loads and
+    'byte identity ready' when it settles. b82c7eb warms silently, so
+    the status span stays empty and the preparing wait times out."""
+    site = tmp_path / "site"
+    _build_site(site)
+    port = _free_port()
+    with _serve_delayed(site, port, 10):
+        page = browser.new_page()
+        try:
+            page.add_init_script("window.__simdrefWasmBase = location.origin + '/wasm-v1/';")
+            page.goto(f"http://127.0.0.1:{port}/")
+            page.wait_for_function("() => document.body.dataset.phase2 === 'done'", timeout=60_000)
+            # Show the annotate view without setTab (its hljs callback
+            # would re-run Annotate once the input is set).
+            page.evaluate("() => { document.body.dataset.tab = 'annotate'; }")
+            page.wait_for_function(
+                "() => document.querySelector('#ann-status').textContent.includes('preparing')",
+                timeout=8_000,
+            )
+            if SHOT_DIR:
+                page.screenshot(path=str(Path(SHOT_DIR) / "warmup-preparing.png"))
+            page.wait_for_function(
+                "() => document.querySelector('#ann-status').textContent.includes('ready')",
+                timeout=30_000,
+            )
+        finally:
+            page.close()
+
+
+@requires_fixtures
 def test_wasm_fetch_failure_keeps_old_rows(browser, tmp_path):
     """A wasm fetch that fails after 6 s: the old-matcher rows land within
     2 s, the status reads byte identity unavailable, and Annotate settles
