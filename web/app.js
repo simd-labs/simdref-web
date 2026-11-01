@@ -900,7 +900,7 @@ function _c3secKind(sec) {
 function _c3apply() {
   const detail = document.getElementById("detail");
   if (!detail) return;
-  const secs = [...detail.querySelectorAll("section.section")].filter(s => !s.closest(".detail-head"));
+  const secs = [...detail.querySelectorAll("section.section")].filter(s => !s.closest(".detail-head") && !s.closest(".detail-keep"));
   const kinds = new Map(secs.map(s => [s, _c3secKind(s)]));
   let t = c3Tab;
   if (!t || ![...kinds.values()].includes(t)) {
@@ -933,8 +933,8 @@ function _c3bar() {
       b.onclick = () => _c3pick(label);
       bar.append(b);
     }
-    const head = detail.querySelector(".detail-head");
-    if (head) head.after(bar); else detail.prepend(bar);
+    const anchor = detail.querySelector(".detail-keep") || detail.querySelector(".detail-head");
+    if (anchor) anchor.after(bar); else detail.prepend(bar);
     _c3apply();
   }, 0);
 }
@@ -979,9 +979,10 @@ function renderIntrinsicDetail(item, detail) {
       </div>
       ${perfSummary(detail && detail._measurements)}
     </div>
+    <div class="detail-keep">
     <section class="section">
       <h3>Summary</h3>
-      <div>${esc(detail ? detail.description : item.description)}</div>
+      <div>${esc((detail ? detail.description : item.description) || "-")}</div>
     </section>
     <section class="section">
       <h3>Metadata</h3>
@@ -1004,6 +1005,7 @@ function renderIntrinsicDetail(item, detail) {
         ${detail && detail.notes && detail.notes.length ? kvChip("Notes", detail.notes.join("; ")) : ""}
       </div>
     </section>
+    </div>
     ${hasMeasurements ? `<section class="section" id="perf-sec">
       <h3>Performance</h3>
       ${renderMeasurements(detail._measurements)}
@@ -1075,6 +1077,7 @@ function renderInstructionDetail(item, detail) {
       </div>
       ${perfSummary(measurements)}
     </div>
+    <div class="detail-keep">
     <section class="section">
       <h3>Summary</h3>
       <div>${esc(d.summary || item.summary || "-")}</div>
@@ -1094,6 +1097,7 @@ function renderInstructionDetail(item, detail) {
         ${meta.mask_policy ? kvChip("Mask Policy", meta.mask_policy) : ""}
       </div>
     </section>
+    </div>
     ${measurements.length ? `<section class="section" id="perf-sec">
       <h3>Performance</h3>
       ${renderMeasurements(measurements)}
@@ -1133,8 +1137,12 @@ async function renderDetail(entry) {
   // mobile view for our own write. No marker when the hash is unchanged:
   // no hashchange event fires for it and the marker would go stale.
   const nextHash = "#" + encodeURIComponent(entry.key);
-  appWrittenHashes.add(nextHash);
-  if (location.hash !== nextHash) {
+  // Compare decoded keys, not encoded strings: the loaded hash may percent-
+  // encode characters encodeURIComponent leaves bare (e.g. parens), so the
+  // raw strings can differ for the same key. Only an unchanged (user deep
+  // link) key is skipped; app navigations are marked and may be dropped.
+  if (decodeURIComponent(location.hash.replace(/^#/, "")) !== entry.key) {
+    appWrittenHashes.add(nextHash);
     appWrittenHash = nextHash;
     location.hash = encodeURIComponent(entry.key);
   }
@@ -1885,12 +1893,23 @@ Promise.all([
       metaNode.textContent = `${data.instructions.length} instructions`;
     }
 
+    // An exact entry key is a deep link, not a search query: leave the box
+    // empty so renderResults opens the entry instead of matching the key
+    // as text and rendering "No results".
     const fromHash = decodeURIComponent(location.hash.replace(/^#/, ""));
-    if (fromHash) queryInput.value = fromHash;
+    if (fromHash && !_hashEntry(fromHash)) {
+      // The hash can name an intrinsic Phase 2 has not ingested yet: hold
+      // the search fallback until the shard is in, then open the entry.
+      intrinsicsReady = _ingestIntrinsics(metaNode).then(() => {
+        if (decodeURIComponent(location.hash.replace(/^#/, "")) === fromHash && !queryInput.value) {
+          if (!_hashEntry(fromHash)) queryInput.value = fromHash;
+          renderResults();
+        }
+      });
+    } else {
+      intrinsicsReady = _ingestIntrinsics(metaNode);
+    }
     renderResults();
-
-    // Phase 2: fold intrinsics into the search index without blocking.
-    intrinsicsReady = _ingestIntrinsics(metaNode);
   })
   .catch((err) => {
     // Fetch failure (CORS, 404, gzip misconfig) should not leave "Loading..." up forever.
@@ -2015,6 +2034,159 @@ function buildInstructionsByMnem() {
     if (!key) continue;
     (instructionsByMnem[key] ||= []).push(entry);
   }
+}
+
+/* ── Byte identity (encodings shard + wasm tools) ──────────────────────
+ * When the site data carries search-index-encodings.json (schema 14),
+ * the Annotate tab identifies lines from their encoded bytes instead of
+ * the regex/width matcher below: one llvm-mc (wasm) run per document,
+ * x86 bytes decoded through XED (wasm), Arm/RISC-V words matched
+ * against the shard's encoding patterns. identity.js holds the port of
+ * src/simdref/asm_identity.py; this side only loads the shard, talks to
+ * the worker and maps shard keys back to instruction entries. */
+const IDENTITY_ISAS = Object.freeze({
+  x86:   { arch: "x86" },
+  arm:   { arch: "aarch64" },  /* the Arm selector covers AArch64 assembly */
+  riscv: { arch: "riscv64" },
+});
+
+let _encodingsShardPromise = null;
+function loadEncodingsShard() {
+  if (!_encodingsShardPromise) {
+    _encodingsShardPromise = fetchJson("search-index-encodings.json")
+      .then(rows => (Array.isArray(rows) && rows.length ? rows : null))
+      .catch(() => null);
+  }
+  return _encodingsShardPromise;
+}
+
+let _identityWorker = null;
+let _identityInitError = null;
+
+function _newIdentityWorker(rows) {
+  const worker = new Worker("identity.js");  // classic: importScripts loads lines.js
+  const state = { worker, seq: 0, pending: new Map(), ready: null };
+  state.ready = new Promise((resolve) => {
+    /* A script that fails to load (404, syntax error) fires onerror
+     * without posting a message: fall back instead of hanging. */
+    worker.onerror = (e) => {
+      _identityInitError = e.message || "identity.js failed to load";
+      resolve(false);
+      /* A worker that dies with a request in flight posts nothing, so
+       * settle the pending annotates too instead of hanging. */
+      for (const slot of state.pending.values()) slot({ type: "run-failed", error: _identityInitError });
+      state.pending.clear();
+    };
+    worker.onmessage = (e) => {
+      const m = e.data || {};
+      if (m.type === "ready") resolve(true);
+      else if (m.type === "init-failed") { _identityInitError = m.error || "init failed"; resolve(false); }
+      else if (m.type === "result" || m.type === "run-failed") {
+        const slot = state.pending.get(m.seq);
+        if (slot) { state.pending.delete(m.seq); slot(m); }
+      }
+    };
+    // __simdrefWasmBase: test suites point the worker at a fixture
+    // server instead of the release assets.
+    worker.postMessage({ type: "init", rows, base: globalThis.__simdrefWasmBase || "" });
+  });
+  return state;
+}
+
+/* Warm the identity worker when the page is idle after load: the shard
+ * fetch, the wasm download, the hash check and the compile then finish
+ * before the first Annotate instead of riding it. The status span
+ * announces the run so the page never looks stuck while it prepares. */
+function warmUpIdentity() {
+  if (typeof Worker === "undefined") return;
+  loadEncodingsShard().then((rows) => {
+    if (!rows || _identityWorker) return;
+    _identityNote = "byte identity preparing…";
+    _renderAnnStatus();
+    const state = (_identityWorker = _newIdentityWorker(rows));
+    state.ready.then((ok) => {
+      /* An Annotate that already ran (status base is set) owns the
+       * note: announcing it here would pre-empt the settle text of its
+       * own identity pass. And a timed-out worker was replaced by
+       * runAnnotate, whose settle path owns the note too. */
+      if (_identityWorker !== state || _annStatusBase !== "") return;
+      _identityNote = ok
+        ? "byte identity ready"
+        : `byte identity unavailable (${_identityInitError || "init failed"})`;
+      _renderAnnStatus();
+    });
+  });
+}
+window.addEventListener("load", () => {
+  if (typeof requestIdleCallback === "function") requestIdleCallback(warmUpIdentity, { timeout: 3000 });
+  else setTimeout(warmUpIdentity, 3000);
+});
+
+/* The per-line identity of one document: an array of
+ * { n, status, key, reason } (1-based lines), or null when byte
+ * identity is unavailable (no shard, no Worker, tool init failed).
+ * Called by runAnnotate and by the identity tests. */
+async function resolveIdentityKeys(text, isa) {
+  const cfg = IDENTITY_ISAS[isa];
+  if (!cfg || typeof Worker === "undefined") return null;
+  const rows = await loadEncodingsShard();
+  if (!rows) return null;
+  if (!_identityWorker) _identityWorker = _newIdentityWorker(rows);
+  const state = _identityWorker;
+  /* One deadline from request start for the whole wait (ready plus
+   * reply): a worker dying silently before ready never settles the
+   * ready promise, so ready alone hangs forever. On expiry the worker
+   * is terminated, any in-flight waits settle, and the old name
+   * matcher answers.
+   * shortcut: the same 60 s covers init and one identify; upgrade to
+   * liveness pings if a large document ever hits the deadline */
+  let timer = null;
+  const expired = new Promise((resolve) => {
+    timer = setTimeout(() => {
+      _identityInitError = "identity worker timed out";
+      if (_identityWorker === state) _identityWorker = null;
+      state.worker.terminate();
+      for (const slot of state.pending.values()) slot(null);
+      state.pending.clear();
+      resolve("expired");
+    }, 60_000);
+  });
+  try {
+    if ((await Promise.race([state.ready, expired])) !== true) return null;
+    const seq = ++state.seq;
+    const reply = await Promise.race([
+      new Promise((resolve) => {
+        state.pending.set(seq, resolve);
+        state.worker.postMessage({ type: "identify", seq, text, arch: cfg.arch });
+      }),
+      expired,
+    ]);
+    if (!reply || reply === "expired") return null;
+    if (reply.type !== "result") {
+      _identityInitError = reply.error || "identify failed";
+      return null;
+    }
+    /* The worker declines a document in which a quoted string spans a
+     * line break: no line gets byte identity and the old name matcher
+     * answers below. */
+    if (reply.results === null) {
+      _identityInitError = "a quoted string spans a line break";
+      return null;
+    }
+    return reply.results;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+const instructionsByKey = Object.create(null);
+let _byKeyBuilt = false;
+function buildInstructionsByKey() {
+  if (_byKeyBuilt) return;
+  for (const entry of (catalog.instructions || [])) {
+    if (entry && entry.key) instructionsByKey[entry.key] = entry;
+  }
+  _byKeyBuilt = true;
 }
 
 function _archOf(entry) {
@@ -2378,27 +2550,58 @@ function syncInputScroll() {
   if (mirror) { mirror.scrollTop = ta.scrollTop; mirror.scrollLeft = ta.scrollLeft; }
 }
 
-async function runAnnotate() {
-  const input = $("ann-input").value;
-  const out   = $("ann-output");
-  const status = $("ann-status");
-  status.textContent = "parsing…";
-  buildInstructionsByMnem();
+/* The status line is base text plus the identity note, so the identity
+ * continuation refreshes the note after the base text landed. */
+let _annStatusBase = "";
+let _identityNote = "";
+function _renderAnnStatus() {
+  const el = $("ann-status");
+  if (el) el.textContent = _annStatusBase + (_annStatusBase && _identityNote ? "; " : "") + _identityNote;
+}
 
-  const lines = input.split("\n");
-  const parsed = lines.map(parseAsmLine);
+/* A document version: every annotate and every edit bumps it, so byte
+ * identity results arriving for an older document are dropped instead
+ * of overwriting the new text's rows. */
+let _annDocSeq = 0;
+
+/* One render pass over a parsed document. identityResults null renders
+ * the regex/width matcher (the site without identity data); an array
+ * upgrades every row to the byte-identity pick. docSeq guards the
+ * final write: a newer document owns the output. */
+async function renderAnnotateOutput(parsed, isa, identityResults, docSeq) {
+  const out = $("ann-output");
   const mnems = new Set();
   for (const p of parsed) if (p.kind === "instruction") mnems.add(p.mnemonic.toUpperCase());
 
-  const isa = $("ann-isa").value || "";
+  /* Byte identity: one llvm-mc run per document when the encodings
+   * shard is there. Per line, identityByLine holds the instruction
+   * entry for the shard key (or null for no-row lines). */
+  let identityByLine = null;
+  if (identityResults) {
+    buildInstructionsByKey();
+    identityByLine = new Map();
+    for (const r of identityResults) {
+      identityByLine.set(r.n, r.key ? instructionsByKey[r.key] || null : null);
+    }
+  }
 
   // Dedup prefix fetches up-front.
   const prefixes = new Set();
-  for (const m of mnems) {
-    const forms = lookupForms(m, isa);
-    for (const f of forms) prefixes.add(chunkPrefix(f.mnemonic));
+  if (identityByLine) {
+    for (const entry of identityByLine.values()) {
+      if (entry) prefixes.add(chunkPrefix(entry.mnemonic));
+    }
+  } else {
+    /* shortcut: the regex/width matcher below stays as the fallback
+     * until the data release ships search-index-encodings.json on
+     * data-latest; the "any" ISA choice needs it even then. */
+    for (const m of mnems) {
+      const forms = lookupForms(m, isa);
+      for (const f of forms) prefixes.add(chunkPrefix(f.mnemonic));
+    }
   }
-  status.textContent = `fetching ${prefixes.size} chunk${prefixes.size === 1 ? "" : "s"}…`;
+  _annStatusBase = `fetching ${prefixes.size} chunk${prefixes.size === 1 ? "" : "s"}…`;
+  _renderAnnStatus();
   await Promise.all([...prefixes].map(p => loadChunk(p)));
 
   // Build measurement cache keyed by instruction-record key.
@@ -2413,14 +2616,21 @@ async function runAnnotate() {
   const opts = readAnnotateOpts();
   let known = 0, unknown = 0;
   const outLines = [];
+  let lineNo = 0;
   for (const p of parsed) {
+    lineNo++;
     if (p.kind !== "instruction") {
       outLines.push(highlightAsm(p.raw, isa));
       continue;
     }
-    const forms = lookupForms(p.mnemonic, isa);
-    const opTokens = isa === "x86" ? _operandWidthTokens(p.operands) : [];
-    const form = forms.length ? pickForm(forms, opts.arch, measurementsByKey, opTokens) : null;
+    let form = null;
+    if (identityByLine) {
+      form = identityByLine.get(lineNo) || null;
+    } else {
+      const forms = lookupForms(p.mnemonic, isa);
+      const opTokens = isa === "x86" ? _operandWidthTokens(p.operands) : [];
+      form = forms.length ? pickForm(forms, opts.arch, measurementsByKey, opTokens) : null;
+    }
     if (!form) {
       unknown++;
       outLines.push(`${highlightAsm(p.raw, isa)}   <span class="hl-unknown">${p.trailing ? "" : "# ??"}</span>`);
@@ -2439,8 +2649,61 @@ async function runAnnotate() {
     known++;
     outLines.push(`${highlightAsm(p.raw, isa)}   <span class="hl-comment"># ${escAnn(annotation)}</span>`);
   }
+  if (docSeq !== _annDocSeq) return;  // a newer document annotated meanwhile
   out.innerHTML = outLines.join("\n");
-  status.textContent = `annotated ${known} / ${known + unknown} (${unknown} unknown)`;
+  _annStatusBase = `annotated ${known} / ${known + unknown} (${unknown} unknown)`;
+  _renderAnnStatus();
+}
+
+async function runAnnotate() {
+  const docSeq = ++_annDocSeq;
+  const input = $("ann-input").value;
+  _annStatusBase = "parsing…";
+  _renderAnnStatus();
+  buildInstructionsByMnem();
+
+  const lines = splitAsmLines(input);
+  /* splitAsmLines drops the phantom line after a trailing terminator
+   * (Python splitlines: the worker numbers only real lines). Re-add it
+   * so the rendered output keeps its trailing blank line; it parses
+   * as blank and no worker row joins to it. */
+  if (input === "" || input.endsWith("\n")) lines.push("");
+  const parsed = lines.map(parseAsmLine);
+
+  const isa = $("ann-isa").value || "";
+
+  /* Byte identity runs in the background: the old matcher renders at
+   * once and the rows upgrade in place when identity lands (the
+   * promise settling here also covers the upgrade, so a caller that
+   * awaits runAnnotate sees the settled state). */
+  let identityPromise = null;
+  if (IDENTITY_ISAS[isa]) {
+    _identityNote = "byte identity preparing…";
+    identityPromise = resolveIdentityKeys(input, isa);
+  } else {
+    _identityNote = "";
+  }
+  const baseRender = renderAnnotateOutput(parsed, isa, null, docSeq);
+  if (!identityPromise) {
+    await baseRender;
+    return;
+  }
+  const upgrade = identityPromise.then(async (identityResults) => {
+    await baseRender;  // the old-matcher render never lands after the upgrade
+    if (docSeq !== _annDocSeq) return;
+    if (identityResults) {
+      _identityNote = "byte identity ready";
+      await renderAnnotateOutput(parsed, isa, identityResults, docSeq);
+    } else {
+      /* No shard or no Worker reads exactly like the site without
+       * identity data (no note); the failure text stays. */
+      _identityNote = _identityInitError
+        ? `byte identity unavailable (${_identityInitError})`
+        : "";
+      _renderAnnStatus();
+    }
+  });
+  await Promise.all([baseRender, upgrade]);
 }
 
 function outputAsText() {
@@ -2541,9 +2804,14 @@ function wireAnnotateTab() {
 
   $("ann-run").addEventListener("click", runAnnotate);
   $("ann-clear").addEventListener("click", () => {
+    _annDocSeq++;
     $("ann-input").value = "";
     $("ann-output").textContent = "";
-    $("ann-status").textContent = "";
+    /* Clear goes through the shared render so the span keeps showing
+     * the current identity state (preparing / ready / unavailable) and
+     * the warm-up settle can still rewrite it while it prepares. */
+    _annStatusBase = "";
+    _renderAnnStatus();
     syncInputHighlight();
   });
   $("ann-copy").addEventListener("click", async () => {
@@ -2573,6 +2841,7 @@ function wireAnnotateTab() {
   // Auto-annotate with debounce as the user types / pastes, and keep the
   // input's syntax-highlighted mirror in sync immediately.
   $("ann-input").addEventListener("input", () => {
+    _annDocSeq++;  // stale byte identity results drop at once, not at the next annotate
     syncInputHighlight();
     persistAnnotateInput();
     scheduleAutoAnnotate();

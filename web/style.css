@@ -768,7 +768,11 @@ a:hover { text-decoration: underline; }
   font-weight: 500;
 }
 .tab-btn:hover { background: var(--surface-hover); color: var(--text); }
-.tab-btn[aria-selected="true"] {
+/* The pill highlight reads the same body[data-tab] bit that shows the
+ * view: aria-selected alone drifts from the view on paths that flip the
+ * view bit directly (screenshot captures set body.dataset.tab). */
+body:not([data-tab="annotate"]) #tab-search,
+body[data-tab="annotate"] #tab-annotate {
   background: var(--accent-soft);
   color: var(--accent);
   border-color: var(--border);
@@ -945,7 +949,8 @@ button.perf-line { background: none; border: none; padding: 0; text-align: left;
 /* E1: results-or-detail, one at a time (mobile) */
 #back-results { display: none; }
 @media (max-width: 768px) {
-  .layout { display: block; }
+  /* Mobile page scroll: reset the fixed-height clip .layout has on desktop. */
+  .layout { display: block; height: auto; overflow: visible; }
   body:not([data-mobile-view="detail"]) .detail-panel:not(:has(.detail-empty)) { display: none; }
   body[data-mobile-view="detail"] .results-panel { display: none; }
   body[data-mobile-view="detail"] #back-results { display: block; position: sticky; top: 0; z-index: 2; }

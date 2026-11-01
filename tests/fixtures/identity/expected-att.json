@@ -1,0 +1,478 @@
+[
+ {
+  "n": 1,
+  "text": "\taddq %rax, %rbx",
+  "status": "row",
+  "reason": "",
+  "key": "x86:add (r64, r64)"
+ },
+ {
+  "n": 2,
+  "text": "\taddl %eax, %ecx",
+  "status": "row",
+  "reason": "",
+  "key": "x86:add (r32, r32)"
+ },
+ {
+  "n": 3,
+  "text": "\taddw %ax, %dx",
+  "status": "row",
+  "reason": "",
+  "key": "x86:add (r16, r16)"
+ },
+ {
+  "n": 4,
+  "text": "\taddb %al, %cl",
+  "status": "row",
+  "reason": "",
+  "key": "x86:add (r8l, r8l)"
+ },
+ {
+  "n": 5,
+  "text": "\tsubq %rax, %rbx",
+  "status": "row",
+  "reason": "",
+  "key": "x86:sub (r64, r64)"
+ },
+ {
+  "n": 6,
+  "text": "\tsubl %eax, %ecx",
+  "status": "row",
+  "reason": "",
+  "key": "x86:sub (r32, r32)"
+ },
+ {
+  "n": 7,
+  "text": "\tsubw %ax, %dx",
+  "status": "row",
+  "reason": "",
+  "key": "x86:sub (r16, r16)"
+ },
+ {
+  "n": 8,
+  "text": "\tsubb %al, %cl",
+  "status": "row",
+  "reason": "",
+  "key": "x86:sub (r8l, r8l)"
+ },
+ {
+  "n": 9,
+  "text": "\tandq %rax, %rbx",
+  "status": "row",
+  "reason": "",
+  "key": "x86:and (r64, r64)"
+ },
+ {
+  "n": 10,
+  "text": "\tandl %eax, %ecx",
+  "status": "row",
+  "reason": "",
+  "key": "x86:and (r32, r32)"
+ },
+ {
+  "n": 11,
+  "text": "\tandw %ax, %dx",
+  "status": "row",
+  "reason": "",
+  "key": "x86:and (r16, r16)"
+ },
+ {
+  "n": 12,
+  "text": "\tandb %al, %cl",
+  "status": "row",
+  "reason": "",
+  "key": "x86:and (r8l, r8l)"
+ },
+ {
+  "n": 13,
+  "text": "\torq %rax, %rbx",
+  "status": "row",
+  "reason": "",
+  "key": "x86:or (r64, r64)"
+ },
+ {
+  "n": 14,
+  "text": "\torl %eax, %ecx",
+  "status": "row",
+  "reason": "",
+  "key": "x86:or (r32, r32)"
+ },
+ {
+  "n": 15,
+  "text": "\torw %ax, %dx",
+  "status": "row",
+  "reason": "",
+  "key": "x86:or (r16, r16)"
+ },
+ {
+  "n": 16,
+  "text": "\torb %al, %cl",
+  "status": "row",
+  "reason": "",
+  "key": "x86:or (r8l, r8l)"
+ },
+ {
+  "n": 17,
+  "text": "\txorq %rax, %rbx",
+  "status": "row",
+  "reason": "",
+  "key": "x86:xor (r64, r64)"
+ },
+ {
+  "n": 18,
+  "text": "\txorl %eax, %ecx",
+  "status": "row",
+  "reason": "",
+  "key": "x86:xor (r32, r32)"
+ },
+ {
+  "n": 19,
+  "text": "\txorw %ax, %dx",
+  "status": "row",
+  "reason": "",
+  "key": "x86:xor (r16, r16)"
+ },
+ {
+  "n": 20,
+  "text": "\txorb %al, %cl",
+  "status": "row",
+  "reason": "",
+  "key": "x86:xor (r8l, r8l)"
+ },
+ {
+  "n": 21,
+  "text": "\tcmpq %rax, %rbx",
+  "status": "row",
+  "reason": "",
+  "key": "x86:cmp (r64, r64)"
+ },
+ {
+  "n": 22,
+  "text": "\tcmpl %eax, %ecx",
+  "status": "row",
+  "reason": "",
+  "key": "x86:cmp (r32, r32)"
+ },
+ {
+  "n": 23,
+  "text": "\tcmpw %ax, %dx",
+  "status": "row",
+  "reason": "",
+  "key": "x86:cmp (r16, r16)"
+ },
+ {
+  "n": 24,
+  "text": "\tcmpb %al, %cl",
+  "status": "row",
+  "reason": "",
+  "key": "x86:cmp (r8l, r8l)"
+ },
+ {
+  "n": 25,
+  "text": "\ttestq %rax, %rbx",
+  "status": "row",
+  "reason": "",
+  "key": "x86:test (r64, r64)"
+ },
+ {
+  "n": 26,
+  "text": "\ttestl %eax, %ecx",
+  "status": "row",
+  "reason": "",
+  "key": "x86:test (r32, r32)"
+ },
+ {
+  "n": 27,
+  "text": "\ttestw %ax, %dx",
+  "status": "row",
+  "reason": "",
+  "key": "x86:test (r16, r16)"
+ },
+ {
+  "n": 28,
+  "text": "\ttestb %al, %cl",
+  "status": "row",
+  "reason": "",
+  "key": "x86:test (r8l, r8l)"
+ },
+ {
+  "n": 29,
+  "text": "\tmovq %rax, %rbx",
+  "status": "row",
+  "reason": "",
+  "key": "x86:mov (r64, r64)"
+ },
+ {
+  "n": 30,
+  "text": "\tmovl %eax, %ecx",
+  "status": "row",
+  "reason": "",
+  "key": "x86:mov (r32, r32)"
+ },
+ {
+  "n": 31,
+  "text": "\tmovw %ax, %dx",
+  "status": "row",
+  "reason": "",
+  "key": "x86:mov (r16, r16)"
+ },
+ {
+  "n": 32,
+  "text": "\tmovb %al, %cl",
+  "status": "row",
+  "reason": "",
+  "key": "x86:mov (r8l, r8l)"
+ },
+ {
+  "n": 33,
+  "text": "\tmovq 8(%rsp), %rax",
+  "status": "row",
+  "reason": "",
+  "key": "x86:mov (r64, m64)"
+ },
+ {
+  "n": 34,
+  "text": "\tmovq %rax, 16(%rsp)",
+  "status": "row",
+  "reason": "",
+  "key": "x86:mov (m64, r64)"
+ },
+ {
+  "n": 35,
+  "text": "\tmovl counter(%rip), %eax",
+  "status": "row",
+  "reason": "",
+  "key": "x86:mov (r32, m32)"
+ },
+ {
+  "n": 36,
+  "text": "\tmovl %eax, counter(%rip)",
+  "status": "row",
+  "reason": "",
+  "key": "x86:mov (m32, r32)"
+ },
+ {
+  "n": 37,
+  "text": "\tmovzbl (%rax), %edx",
+  "status": "row",
+  "reason": "",
+  "key": "x86:movzx (r32, m8)"
+ },
+ {
+  "n": 38,
+  "text": "\tmovzwl 2(%rdi), %eax",
+  "status": "row",
+  "reason": "",
+  "key": "x86:movzx (r32, m16)"
+ },
+ {
+  "n": 39,
+  "text": "\tmovslq %eax, %rdx",
+  "status": "row",
+  "reason": "",
+  "key": "x86:movsxd (r64, r32)"
+ },
+ {
+  "n": 40,
+  "text": "\tmovsbq %al, %rax",
+  "status": "row",
+  "reason": "",
+  "key": "x86:movsx (r64, r8l)"
+ },
+ {
+  "n": 41,
+  "text": "\tmovswq (%rdi), %rax",
+  "status": "row",
+  "reason": "",
+  "key": "x86:movsx (r64, m16)"
+ },
+ {
+  "n": 42,
+  "text": "\tmovsbl (%rax), %edx",
+  "status": "row",
+  "reason": "",
+  "key": "x86:movsx (r32, m8)"
+ },
+ {
+  "n": 43,
+  "text": "\tleaq 16(%rdi,%rsi,4), %rax",
+  "status": "row",
+  "reason": "",
+  "key": "x86:lea_b_is_d8 (r64)"
+ },
+ {
+  "n": 44,
+  "text": "\tpushq %rbp",
+  "status": "row",
+  "reason": "",
+  "key": "x86:push (r64)"
+ },
+ {
+  "n": 45,
+  "text": "\tpopq %rbp",
+  "status": "row",
+  "reason": "",
+  "key": "x86:pop (r64)"
+ },
+ {
+  "n": 46,
+  "text": "\timulq %rsi, %rax",
+  "status": "row",
+  "reason": "",
+  "key": "x86:imul (r64, r64)"
+ },
+ {
+  "n": 47,
+  "text": "\tshlq $2, %rax",
+  "status": "row",
+  "reason": "",
+  "key": "x86:shl (r64, i8)"
+ },
+ {
+  "n": 48,
+  "text": "\tsarq $3, %rax",
+  "status": "row",
+  "reason": "",
+  "key": "x86:sar (r64, i8)"
+ },
+ {
+  "n": 49,
+  "text": "\taddq $8, %rsp",
+  "status": "row",
+  "reason": "",
+  "key": "x86:add (r64, i8)"
+ },
+ {
+  "n": 50,
+  "text": "\tsubq $32, %rsp",
+  "status": "row",
+  "reason": "",
+  "key": "x86:sub (r64, i8)"
+ },
+ {
+  "n": 51,
+  "text": "\tcmpl $0, %eax",
+  "status": "row",
+  "reason": "",
+  "key": "x86:cmp (r32, 0)"
+ },
+ {
+  "n": 52,
+  "text": "\tmovsd 8(%rsp), %xmm0",
+  "status": "row",
+  "reason": "",
+  "key": "x86:movsd_xmm (xmm, m64)"
+ },
+ {
+  "n": 53,
+  "text": "\tmovss (%rax), %xmm0",
+  "status": "row",
+  "reason": "",
+  "key": "x86:movss (xmm, m32)"
+ },
+ {
+  "n": 54,
+  "text": "\taddsd %xmm1, %xmm0",
+  "status": "row",
+  "reason": "",
+  "key": "x86:addsd (xmm, xmm)"
+ },
+ {
+  "n": 55,
+  "text": "\tmulsd %xmm2, %xmm0",
+  "status": "row",
+  "reason": "",
+  "key": "x86:mulsd (xmm, xmm)"
+ },
+ {
+  "n": 56,
+  "text": "\tvaddps %ymm2, %ymm1, %ymm0",
+  "status": "row",
+  "reason": "",
+  "key": "x86:vaddps (ymm, ymm, ymm)"
+ },
+ {
+  "n": 57,
+  "text": "\tvmulps (%rax), %ymm1, %ymm0",
+  "status": "row",
+  "reason": "",
+  "key": "x86:vmulps (ymm, ymm, m256)"
+ },
+ {
+  "n": 58,
+  "text": "\tvpxor %xmm0, %xmm0, %xmm0",
+  "status": "row",
+  "reason": "",
+  "key": "x86:vpxor (xmm, xmm, xmm)"
+ },
+ {
+  "n": 59,
+  "text": "\tvxorps %ymm0, %ymm0, %ymm0",
+  "status": "row",
+  "reason": "",
+  "key": "x86:vxorps (ymm, ymm, ymm)"
+ },
+ {
+  "n": 60,
+  "text": "\tcltq",
+  "status": "row",
+  "reason": "",
+  "key": "x86:cdqe"
+ },
+ {
+  "n": 61,
+  "text": "\tcqto",
+  "status": "row",
+  "reason": "",
+  "key": "x86:cqo"
+ },
+ {
+  "n": 62,
+  "text": "\tcltd",
+  "status": "row",
+  "reason": "",
+  "key": "x86:cdq"
+ },
+ {
+  "n": 63,
+  "text": "\tcwtl",
+  "status": "row",
+  "reason": "",
+  "key": "x86:cwde"
+ },
+ {
+  "n": 64,
+  "text": "\tcbtw",
+  "status": "row",
+  "reason": "",
+  "key": "x86:cbw"
+ },
+ {
+  "n": 65,
+  "text": "\tret",
+  "status": "row",
+  "reason": "",
+  "key": "x86:ret_near"
+ },
+ {
+  "n": 66,
+  "text": "\tleave",
+  "status": "row",
+  "reason": "",
+  "key": "x86:leave"
+ },
+ {
+  "n": 67,
+  "text": "\tnop",
+  "status": "row",
+  "reason": "",
+  "key": "x86:nop"
+ },
+ {
+  "n": 68,
+  "text": "\tvzeroupper",
+  "status": "row",
+  "reason": "",
+  "key": "x86:vzeroupper"
+ }
+]

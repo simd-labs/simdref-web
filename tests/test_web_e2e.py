@@ -28,7 +28,7 @@ from playwright.sync_api import Error as PlaywrightError, sync_playwright  # noq
 
 REPO_ROOT = Path(__file__).parent.parent
 FIXTURE_SITE_DATA = REPO_ROOT / "tests" / "fixtures" / "site-data"
-STATIC_FILES = ("index.html", "app.js", "style.css", "favicon.svg", "logo.svg")
+STATIC_FILES = ("index.html", "app.js", "lines.js", "style.css", "favicon.svg", "logo.svg")
 
 # CI points this at a real `simdref export` output (see rebuild-site.yml) so a
 # core format change fails here instead of silently shipping a broken site.

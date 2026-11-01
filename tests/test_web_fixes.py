@@ -151,6 +151,66 @@ def test_f3_no_horizontal_overflow_at_390(browser, site):
         page.close()
 
 
+# iPhone 13, per Playwright's device descriptor.
+IPHONE_13 = {
+    "user_agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) "
+    "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Mobile/15E148 Safari/604.1",
+    "viewport": {"width": 390, "height": 844},
+    "device_scale_factor": 3,
+    "is_mobile": True,
+    "has_touch": True,
+}
+
+
+def test_mobile_search_view_scrolls_with_touch(browser, site):
+    """M1: on a phone a touch swipe must scroll the Search view. The desktop
+    rule `.layout { height: calc(100vh - 90px); overflow: hidden }` clipped
+    the page on mobile, so only the inner results list scrolled and the
+    document itself never moved. The fixture's few 'add' rows fit one
+    screen, so the test clones them until the document outgrows the
+    viewport."""
+    _, url = site
+    context = browser.new_context(**IPHONE_13)
+    page = context.new_page()
+    try:
+        page.goto(url)
+        page.locator("#query").fill("add")
+        page.wait_for_function("document.querySelectorAll('#results .result').length > 0")
+        page.evaluate(
+            """() => {
+                const list = document.querySelector('#results');
+                const rows = Array.from(list.children);
+                for (let i = 0; i < 24; i++)
+                    rows.forEach(r => list.appendChild(r.cloneNode(true)));
+            }"""
+        )
+        taller = page.evaluate("document.scrollingElement.scrollHeight > window.innerHeight + 100")
+        assert taller, (
+            "document is not taller than the screen: the layout clip from the "
+            "desktop .layout rule is still active"
+        )
+        cdp = context.new_cdp_session(page)
+        x, y0, y1 = 195, int(844 * 0.75), int(844 * 0.2)
+        cdp.send(
+            "Input.dispatchTouchEvent",
+            {"type": "touchStart", "touchPoints": [{"x": x, "y": y0, "id": 1}]},
+        )
+        for i in range(1, 13):
+            cdp.send(
+                "Input.dispatchTouchEvent",
+                {
+                    "type": "touchMove",
+                    "touchPoints": [{"x": x, "y": y0 + (y1 - y0) * i // 12, "id": 1}],
+                },
+            )
+        cdp.send("Input.dispatchTouchEvent", {"type": "touchEnd", "touchPoints": []})
+        page.wait_for_timeout(400)
+        top = page.evaluate("document.scrollingElement.scrollTop")
+        assert top > 0, f"touch swipe left the document at scrollTop={top}"
+    finally:
+        context.close()
+
+
 def _goto_addps_detail(page, url):
     page.goto(url)
     # '(xmm, xmm)' form; the plain 'addps' query ranks the (xmm, m128)
@@ -294,6 +354,76 @@ def test_default_tab_falls_back_when_no_perf(browser, site):
             ".find(b => /Perf/.test(b.textContent))?.getAttribute('aria-pressed')"
         )
         assert perf_sel in ("false", None), perf_sel
+    finally:
+        page.close()
+
+
+@NEEDS_EXPORT
+@pytest.mark.parametrize(
+    ("query", "key", "tabs"),
+    [
+        ("vaddps (xmm, xmm, xmm)", "x86:vaddps (xmm, xmm, xmm)", 4),
+        ("_mm256_add_ps", "_mm256_add_ps", 4),
+    ],
+)
+def test_summary_metadata_visible_on_every_detail_tab(browser, site, query, key, tabs):
+    """Summary and metadata stay above the detail tab bar. They must stay
+    visible on every detail tab. Subjects: VADDPS (instruction path) and
+    _mm256_add_ps (intrinsic path); both render all four tabs."""
+    _, url = site
+    page = browser.new_page(viewport={"width": 1280, "height": 800})
+    state = """
+        (() => {
+            const sec = h => Array.from(document.querySelectorAll('#detail section.section'))
+                .find(s => s.querySelector('h3')?.textContent === h);
+            const vis = el => !!el && !el.closest('.detail-hidden')
+                && getComputedStyle(el).display !== 'none'
+                && el.getBoundingClientRect().height > 0;
+            const sum = sec('Summary');
+            const chips = Array.from(document.querySelectorAll('#detail .kv-chip'))
+                .filter(c => vis(c) && /[A-Za-z0-9]/.test(c.innerText));
+            const bar = document.querySelector('#detail .detail-tabs');
+            const srect = sum ? sum.getBoundingClientRect() : null;
+            const above = sum && bar
+                ? srect.height > 0 && srect.bottom <= bar.getBoundingClientRect().top + 1
+                : false;
+            return {
+                summary: vis(sum) && /Add Packed Single.?Precision/i.test(sum.innerText),
+                chipCount: chips.length,
+                above,
+            };
+        })()
+    """
+    try:
+        page.goto(url)
+        page.locator("#query").fill(query)
+        page.wait_for_function("document.querySelectorAll('#results .result').length > 0")
+        page.evaluate(
+            "key => Array.from(document.querySelectorAll('#results .result'))"
+            ".find(r => r.dataset.key === key)?.click()",
+            key,
+        )
+        page.wait_for_function(
+            "() => document.querySelector('#detail .detail-head')", timeout=15_000
+        )
+        page.wait_for_function(
+            "() => document.querySelector('#detail .detail-tabs')", timeout=15_000
+        )
+        _settled(page)
+        first = page.evaluate(state)
+        assert first["above"], "Summary must render above the detail tab bar"
+        n = page.evaluate("document.querySelectorAll('#detail .detail-tabs button').length")
+        assert n == tabs, n
+        for i in range(n):
+            label = page.evaluate(
+                f"document.querySelectorAll('#detail .detail-tabs button')[{i}].textContent"
+            )
+            page.evaluate(f"document.querySelectorAll('#detail .detail-tabs button')[{i}].click()")
+            page.wait_for_timeout(150)
+            r = page.evaluate(state)
+            assert r["summary"], f"Summary not visible on tab {label!r}: {r}"
+            assert r["chipCount"] >= 1, f"no metadata chip visible on tab {label!r}: {r}"
+            assert r["above"], f"Summary not above the tab bar on tab {label!r}: {r}"
     finally:
         page.close()
 
@@ -467,5 +597,48 @@ def test_number_keys_ignore_modifiers_and_inputs(browser, site):
         page.keyboard.press("2")
         page.wait_for_timeout(100)
         assert page.evaluate(tab_sel) == sel0
+    finally:
+        page.close()
+
+
+@NEEDS_EXPORT
+@pytest.mark.parametrize(
+    "key,expected",
+    [
+        ("x86:vaddps (xmm, xmm, m128)", "VADDPS"),
+        ("x86:imul (m16)", "IMUL"),
+        # Intrinsic keys land at bootstrap before Phase 2 ingests the shard.
+        ("__riscv_vsoxseg5ei16_v_i8mf8x5", "__riscv_vsoxseg5ei16_v_i8mf8x5"),
+    ],
+)
+def test_deeplink_exact_key_opens_entry_not_no_results(browser, site, key, expected):
+    """A fresh page load with an exact entry key in the hash must open the
+    detail entry, not treat the raw key as a search query and render
+    "No results". Regression for x86:vaddps (xmm, xmm, m128)."""
+    from urllib.parse import quote
+
+    _, url = site
+    page = browser.new_page(viewport={"width": 1280, "height": 800})
+    try:
+        page.goto(url + "#" + quote(key, safe=""))
+        page.wait_for_function(
+            "() => document.body.dataset.phase2 === 'done'"
+            " && !!document.querySelector('#detail .detail-head')",
+            timeout=120_000,
+        )
+        # Phase 2's done marker can beat the deferred deep-link render by a
+        # microtask; wait for the head to name this entry.
+        page.wait_for_function(
+            "(want) => (document.querySelector('#detail .detail-head')?.innerText || '')"
+            ".toUpperCase().includes(want)",
+            arg=expected.upper(),
+            timeout=120_000,
+        )
+        head = page.evaluate(
+            "() => (document.querySelector('#detail .detail-head')?.innerText || '').toUpperCase()"
+        )
+        assert expected.upper() in head, head
+        body = page.evaluate("() => document.body.innerText")
+        assert "No results" not in body, body[:800]
     finally:
         page.close()
