@@ -78,6 +78,7 @@ let DEFAULT_SUBS = {};
 let isaFamilyOrder = {};
 let ARCH_PRESETS = {};
 let enabledArmArch = null; // null = no filter; Set of "A32"|"A64"|"BOTH" when active
+let activeCategory = null; // null = no filter; Intel intrinsic category when set
 
 /* ── Theme ────────────────────────────────────────────────────────── */
 function getEffectiveTheme() {
@@ -180,6 +181,7 @@ let bucketsBuilt = false;
 const byKind = new Map();
 const byFamily = new Map();
 const byArmArch = new Map();
+const byCategory = new Map();
 
 function _pushBucket(map, key, i) {
   let arr = map.get(key);
@@ -188,12 +190,12 @@ function _pushBucket(map, key, i) {
 }
 
 function buildBuckets() {
-  byKind.clear(); byFamily.clear(); byArmArch.clear();
+  byKind.clear(); byFamily.clear(); byArmArch.clear(); byCategory.clear();
   extendBuckets(searchEntries, 0);
   bucketsBuilt = true;
 }
 
-/* Append ``entries`` to the kind/family/arm-arch buckets at
+/* Append ``entries`` to the kind/family/arm-arch/category buckets at
  * absolute positions ``baseIndex + offset``. Used by Phase-2 intrinsic
  * ingest so newly-arrived entries are reachable via the kind filter
  * without rebuilding from scratch. */
@@ -207,6 +209,7 @@ function extendBuckets(entries, baseIndex) {
     for (const f of fams) _pushBucket(byFamily, f, i);
     const arch = e.item.arm_arch || "__none";
     _pushBucket(byArmArch, arch, i);
+    _pushBucket(byCategory, e.item.category || "__none", i);
   }
 }
 
@@ -249,6 +252,17 @@ function rebuildVisibleSet() {
     const intersect = new Set();
     for (const i of armCand) if (cand.has(i)) intersect.add(i);
     for (const i of nonArm) intersect.add(i);
+    cand = intersect;
+  }
+
+  if (activeCategory) {
+    // Same shape as the arm_arch facet: entries with no category pass
+    // through, only category-carrying rows get narrowed.
+    const catCand = _unionKeys(byCategory, [activeCategory]);
+    const passthrough = _filterSet(cand, (i) => !searchEntries[i].item.category);
+    const intersect = new Set();
+    for (const i of catCand) if (cand.has(i)) intersect.add(i);
+    for (const i of passthrough) intersect.add(i);
     cand = intersect;
   }
 
@@ -575,6 +589,7 @@ function decodeIntrinsics(s) {
     if (c.prim[i] >= 0) e.primary_instr = s.prim[c.prim[i]];
     if (c.arm[i] >= 0) e.arm_arch = s.arm[c.arm[i]];
     if (c.cat[i] >= 0) e.category = s.cat[c.cat[i]];
+    if (c.sub && c.sub[i] >= 0) e.subcategory = s.sub[c.sub[i]];
     out[i] = e;
   }
   return out;
@@ -805,7 +820,19 @@ const operandHeaders = [
   {key: "width", label: "Width"},
   {key: "xtype", label: "XType"},
   {key: "name", label: "Name", cls: "mono"},
+  {key: "flags", label: "Flags", render: r => esc(_operandFlagsText(r) || "-")},
 ];
+
+/* uops.info flag reads/writes (CF, OF, SF, ...) plus the suppressed mark,
+ * same text as simdref.display.operand_flags_text. */
+function _operandFlagsText(r) {
+  const parts = Object.keys(r)
+    .filter(k => k.startsWith("flag_") && r[k])
+    .sort()
+    .map(k => `${k.slice(5)} ${r[k]}`);
+  if (r.suppressed === "1") parts.push("suppressed");
+  return parts.join("; ");
+}
 
 function _nums(v) { return String(v == null ? "" : v).match(/\d+(?:\.\d+)?/g)?.map(Number) || []; }
 function perfSummary(ms) {
@@ -941,6 +968,10 @@ function renderIntrinsicDetail(item, detail) {
         ${kvChip("ISA", item.display_isa || displayIsa(item.isa))}
         ${item.header ? kvChip("Header", item.header) : ""}
         ${item.category ? kvChip("Category", item.subcategory ? `${item.subcategory} / ${item.category}` : item.category) : ""}
+        ${meta.masking ? kvChip("Masking", meta.masking) : ""}
+        ${meta.policy ? kvChip("Policy", meta.policy) : ""}
+        ${meta.tail_policy ? kvChip("Tail Policy", meta.tail_policy) : ""}
+        ${meta.mask_policy ? kvChip("Mask Policy", meta.mask_policy) : ""}
         ${instrMeta.category ? kvChip("Instr Cat", instrMeta.category) : ""}
         ${instrMeta.cpl ? kvChip("CPL", instrMeta.cpl) : ""}
         ${meta.supported_architectures ? kvChip("Supported", meta.supported_architectures) : ""}
@@ -1035,6 +1066,10 @@ function renderInstructionDetail(item, detail) {
         ${kvChip("ISA", item.display_isa || displayIsa(item.isa))}
         ${meta.category ? kvChip("Category", meta.category) : ""}
         ${meta.cpl ? kvChip("CPL", meta.cpl) : ""}
+        ${meta.masking ? kvChip("Masking", meta.masking) : ""}
+        ${meta.policy ? kvChip("Policy", meta.policy) : ""}
+        ${meta.tail_policy ? kvChip("Tail Policy", meta.tail_policy) : ""}
+        ${meta.mask_policy ? kvChip("Mask Policy", meta.mask_policy) : ""}
       </div>
     </section>
     ${measurements.length ? `<section class="section" id="perf-sec">
@@ -1841,6 +1876,28 @@ Promise.all([
     showLoadError("Could not load the search index. Open the browser console for details.");
   });
 
+/* Fill the category facet from the loaded intrinsics. The option list
+ * comes from the data, so an export without categories leaves only the
+ * default "all" row. */
+function _populateCategoryFacet(intrinsics) {
+  const select = document.getElementById("cat-filter");
+  if (!select) return;
+  const cats = [...new Set(intrinsics.map(i => i.category).filter(Boolean))].sort();
+  for (const cat of cats) {
+    const opt = document.createElement("option");
+    opt.value = cat;
+    opt.textContent = cat;
+    select.appendChild(opt);
+  }
+}
+
+const catFilter = document.getElementById("cat-filter");
+if (catFilter) catFilter.addEventListener("change", () => {
+  activeCategory = catFilter.value || null;
+  visibleSet = null;
+  scheduleFilterRender();
+});
+
 /* Phase 2 — fold the intrinsic shard into searchEntries / search index in
  * idle-time batches so the main thread keeps responding to scrolls and
  * keystrokes. Resolves once every intrinsic is searchable. */
@@ -1871,6 +1928,7 @@ function _ingestIntrinsics(metaNode) {
     }
     catalog.intrinsics = intrinsics;
     for (const item of intrinsics) catalog.intrByName[item.name] = item;
+    _populateCategoryFacet(intrinsics);
 
     let cursor = 0;
     const total = intrinsics.length;

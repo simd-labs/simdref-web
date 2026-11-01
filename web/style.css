@@ -121,6 +121,16 @@ body {
   font-size: 0.85rem;
 }
 .kind-label { color: var(--text-muted); margin-right: 4px; }
+.cat-filter {
+  font: inherit;
+  font-size: 0.85rem;
+  color: var(--text);
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1px 4px;
+  cursor: pointer;
+}
 .chip-count {
   color: var(--text-muted);
   margin-left: 6px;
