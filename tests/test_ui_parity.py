@@ -45,10 +45,12 @@ def test_no_drifted_kind_bar_label():
 
 def test_modeled_toggle_names_arm_riscv_not_intel():
     # All x86 rows are measured; modeled data is ARM/RISC-V (llvm-mca).
+    # The toggle text matches UI_LABELS["source_modeled"] exactly.
     html = _read("index.html")
     assert "modeled (Intel)" not in html
     assert "Intel-modeled" not in html
-    assert "modeled (ARM/RISC-V)" in html
+    assert "Modeled (ARM/RISC-V)" in html
+    assert "> modeled (ARM/RISC-V)<" not in html
 
 
 def test_web_cpi_uses_exported_value_not_fallback():

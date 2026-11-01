@@ -344,8 +344,8 @@ function _rowMarkup(entry, index) {
       </div>
       <div class="result-title">${esc(entry.title)}</div>
       <div class="result-meta">
-        ${entry.item.lat && entry.item.lat !== "-" ? `<span class="result-perf">LAT ${esc(entry.item.lat)}</span>` : ""}
-        ${entry.item.cpi && entry.item.cpi !== "-" ? `<span class="result-perf">CPI ${esc(entry.item.cpi)}</span>` : ""}
+        ${entry.item.lat && entry.item.lat !== "-" ? `<span class="result-perf" title="best over cores">LAT ${esc(entry.item.lat)}</span>` : ""}
+        ${entry.item.cpi && entry.item.cpi !== "-" ? `<span class="result-perf" title="best over cores">CPI ${esc(entry.item.cpi)}</span>` : ""}
       </div>
       <div class="result-summary">${esc(entry.subtitle || "")}</div>
     </article>`;
@@ -767,6 +767,19 @@ function renderMeasurements(measurements) {
     for (const [family, frows] of groups) {
       inner += `<details class="meas-group" ${gi++ === 0 && kind === splits[0][0] ? "open" : ""}><summary>${esc(family)} (${frows.length})</summary>${renderTable(measHeaders, frows)}</details>`;
     }
+    /* Provenance footnote: one "name version citation" line per distinct
+       source in the panel. Rows without the fields add no line. */
+    const provenance = new Map();
+    for (const r of rows) {
+      if (r.source && !provenance.has(r.source)) {
+        provenance.set(r.source, {version: r.sourceVersion || "", url: r.citationUrl || ""});
+      }
+    }
+    for (const [name, prov] of provenance) {
+      const label = [name, prov.version].filter(Boolean).join(" ");
+      const link = prov.url ? ` · <a href="${esc(prov.url)}" target="_blank" rel="noopener noreferrer">${esc(prov.url)}</a>` : "";
+      inner += `<div class="perf-src" style="color:var(--text-muted);font-size:0.82rem">${esc(label)}${link}</div>`;
+    }
     html += `<section class="perf-panel" style="border-left:3px solid ${color};padding-left:0.6rem;margin-bottom:0.8rem">
       <h4 style="margin:0 0 0.3rem 0;color:${color};font-size:0.85rem">${esc(label)} (${rows.length})</h4>
       ${inner}
@@ -848,7 +861,9 @@ function perfSummary(ms) {
   const med = x => x[Math.floor(x.length / 2)];
   const p = [];
   if (lat.length) { const lo = Math.min(...lat), hi = Math.max(...lat); p.push(`Latency ${lo === hi ? lo : lo + "-" + hi} cycles`); }
-  if (cpi.length) p.push(`CPI ${med(cpi)}`);
+  /* CPI uses the list aggregate: the lowest value over cores, matching
+     perf.perf_row_values + best_numeric in the export. */
+  if (cpi.length) p.push(`CPI ${Math.min(...cpi)}`);
   if (uo.length) p.push(`${med(uo)} uop${med(uo) === 1 ? "" : "s"}`);
   return p.length ? `<button type="button" class="perf-line" id="perf-goto">Go to Performance: ${esc(p.join(" · "))}</button>` : "";
 }
