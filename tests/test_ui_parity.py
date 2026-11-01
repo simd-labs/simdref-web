@@ -41,3 +41,23 @@ def test_result_row_height_constant_matches_css():
 
 def test_no_drifted_kind_bar_label():
     assert "> asm / instructions<" not in _read("index.html")
+
+
+def test_modeled_toggle_names_arm_riscv_not_intel():
+    # All x86 rows are measured; modeled data is ARM/RISC-V (llvm-mca).
+    html = _read("index.html")
+    assert "modeled (Intel)" not in html
+    assert "Intel-modeled" not in html
+    assert "modeled (ARM/RISC-V)" in html
+
+
+def test_web_cpi_uses_exported_value_not_fallback():
+    # perf.perf_row_values in Python is the only place that picks CPI;
+    # app.js must display the exported tpLoop, never recompute it.
+    text = _read("app.js")
+    m = re.search(r"function _cpiValue\(row\) \{(?P<body>.*?)\n\}", text, re.DOTALL)
+    assert m, "_cpiValue missing from app.js"
+    body = m.group("body")
+    assert "row.tpLoop" in body
+    assert "tpUnrolled" not in body
+    assert "tpPorts" not in body

@@ -64,7 +64,7 @@
     <label class="isa-chip active"><input type="checkbox" data-kind="instruction" checked> instructions</label>
     <span class="kind-label" style="margin-left:0.8rem">Perf:</span>
     <label class="isa-chip active"><input type="checkbox" data-perf-kind="measured" checked> measured</label>
-    <label class="isa-chip active" title="Intel-modeled uops.info numbers used when no measured data exists for the mnemonic"><input type="checkbox" data-perf-kind="modeled" checked> modeled (Intel)</label>
+    <label class="isa-chip active" title="ARM/RISC-V modeled numbers used when no measured data exists for the mnemonic"><input type="checkbox" data-perf-kind="modeled" checked> modeled (ARM/RISC-V)</label>
   </div>
 
   <div class="layout">
@@ -107,7 +107,7 @@
       </label>
       <label><input type="checkbox" id="ann-perf" checked> perf</label>
       <label><input type="checkbox" id="ann-docs" checked> docs</label>
-      <label title="Fall back to Intel-modeled numbers when no measured data exists for the mnemonic"><input type="checkbox" id="ann-modeled" checked> include modeled</label>
+      <label title="Fall back to ARM/RISC-V modeled numbers when no measured data exists for the mnemonic"><input type="checkbox" id="ann-modeled" checked> include modeled</label>
       <button id="ann-run" type="button" class="primary" title="Annotate (Ctrl+Enter)">Annotate</button>
       <button id="ann-clear" type="button" title="Clear input + output">Clear</button>
       <button id="ann-copy" type="button" title="Copy annotated output">Copy .sa</button>

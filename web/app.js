@@ -2024,11 +2024,12 @@ function pickForm(forms, arch, measurementsByKey, opTokens) {
 }
 
 function _cpiValue(row) {
-  for (const k of ["tpUnrolled", "tpLoop", "tpPorts"]) {
-    const v = row[k];
-    if (v != null && v !== "" && v !== "-" && !isNaN(parseFloat(v))) return parseFloat(v);
-  }
-  return null;
+  /* CPI is pre-picked by the export (perf.perf_row_values: TP_loop, else
+   * TP); the web app shows the exported value and never recomputes it. */
+  const v = row.tpLoop;
+  if (v == null || v === "" || v === "-") return null;
+  const n = parseFloat(v);
+  return isNaN(n) ? null : n;
 }
 
 function _latValue(row) {
