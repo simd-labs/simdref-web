@@ -717,6 +717,27 @@ function splitMeasurements(measurements) {
 const perfKindLabels = {measured: "perf (measured)", modeled: "perf (modeled)"};
 const perfKindBorders = {measured: "var(--accent-green, #2ea043)", modeled: "var(--accent-yellow, #bf8700)"};
 
+function renderLatencyPairs(measurements) {
+  /* Small table of latency per operand pair (uops.info start_op -> target_op),
+     exported as latencyPairs on detail-chunk measurement rows. Rows without
+     the field render nothing, never an empty pair column. */
+  const rows = (measurements || []).filter(
+    r => Array.isArray(r.latencyPairs) && r.latencyPairs.length
+  );
+  if (!rows.length) return "";
+  const pairCell = r =>
+    r.latencyPairs
+      .map(p => `${esc(p.value)} (${esc(p.start)}->${esc(p.target)}${p.sameReg ? `, same reg ${esc(p.sameReg)}` : ""})`)
+      .join(", ");
+  return renderTable(
+    [
+      {key: "uarch", label: "microarch", render: r => esc(uarchLabels[r.uarch] || r.uarch)},
+      {key: "latencyPairs", label: "latency per operand pair", render: pairCell},
+    ],
+    rows
+  );
+}
+
 function renderMeasurements(measurements) {
   if (!measurements || !measurements.length) return `<div style="color:var(--text-muted);font-size:0.82rem">No performance data.</div>`;
   const splits = splitMeasurements(measurements).filter(([kind]) => enabledPerfKinds.has(kind));
@@ -736,6 +757,7 @@ function renderMeasurements(measurements) {
       ${inner}
     </section>`;
   }
+  html += renderLatencyPairs(splits.flatMap(([, rows]) => rows));
   return html;
 }
 
