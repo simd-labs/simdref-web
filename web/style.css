@@ -119,6 +119,9 @@ body {
   align-items: center;
   padding: 4px 16px;
   font-size: 0.85rem;
+  /* The chips and the category select can wrap below ~1100 px instead of
+     pushing the page horizontally. */
+  flex-wrap: wrap;
 }
 .kind-label { color: var(--text-muted); margin-right: 4px; }
 .cat-filter {
@@ -130,6 +133,8 @@ body {
   border-radius: var(--radius);
   padding: 1px 4px;
   cursor: pointer;
+  /* A long option text must never size the select past its bar. */
+  max-width: 100%;
 }
 .chip-count {
   color: var(--text-muted);
@@ -946,6 +951,13 @@ button.perf-line { background: none; border: none; padding: 0; text-align: left;
 .detail-tabs button:disabled { opacity: .4; cursor: not-allowed; text-decoration: line-through; }
 .detail-hidden { display: none !important; }
 
+/* Below 1100px the detail panel is narrower than a wide perf table; the
+   table scrolls inside its own container (page stays without horizontal
+   scroll). Mirrors the 768px mobile rule. */
+@media (max-width: 1100px) {
+  #detail table { display: block; overflow-x: auto; }
+}
+
 /* E1: results-or-detail, one at a time (mobile) */
 #back-results { display: none; }
 @media (max-width: 768px) {
@@ -957,7 +969,6 @@ button.perf-line { background: none; border: none; padding: 0; text-align: left;
   .kind-bar { flex-wrap: wrap; }
   .kind-bar .kind-label { display: none; }
   .header-right .meta { display: none; }
-  #detail table { display: block; overflow-x: auto; }
   .layout, .results-panel, .detail-panel { min-width: 0; }
   .header { flex-wrap: wrap; row-gap: .3rem; padding: .4rem .6rem; }
   .header-left { min-width: 0; flex-wrap: wrap; }

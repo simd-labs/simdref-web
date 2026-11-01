@@ -121,6 +121,10 @@ def test_f3_no_horizontal_overflow_at_390(browser, site):
         past = page.evaluate(
             """Array.from(document.querySelectorAll('body *')).map(el => {
                 const r = el.getBoundingClientRect();
+                // A cell inside a table that scrolls horizontally in its own
+                // container is clipped, not page overflow: skip it.
+                const table = el.closest('table');
+                if (table && table.closest('div, section, main') && table.scrollWidth > table.clientWidth) return null;
                 return (el.children.length === 0 || el.matches('header, button, input, main, aside, .results-list, .search-bar'))
                     && r.right > document.documentElement.clientWidth + 1 && r.width > 0
                     && getComputedStyle(el).display !== 'none'

@@ -709,6 +709,7 @@ const uarchLabels = {
 
 const measHeaders = [
   {key: "uarch", label: "microarch", render: r => esc(uarchLabels[r.uarch] || r.uarch)},
+  {key: "source", label: "src"},
   {key: "latency", label: "LAT", cls: "highlight"},
   {key: "tpLoop", label: "CPI", cls: "highlight"},
   {key: "tpPorts", label: "CPI ports"},
