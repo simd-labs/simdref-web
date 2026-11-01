@@ -783,7 +783,7 @@ const descSectionOrder = [
   "Numeric Exceptions", "Other Exceptions",
   "Protected Mode Exceptions", "Real-Address Mode Exceptions",
   "Virtual-8086 Mode Exceptions", "Compatibility Mode Exceptions",
-  "64-Bit Mode Exceptions",
+  "64-Bit Mode Exceptions", "Opcode & Modes", "Operand Encoding",
 ];
 const codeSections = new Set(["Operation", "Intrinsic Equivalents"]);
 
