@@ -554,6 +554,8 @@ body {
 }
 .kv dt { color: var(--text-muted); font-weight: 600; }
 .kv dd { word-break: break-word; }
+/* Long source URLs are link text; they must wrap inside a 390px viewport. */
+a { word-break: break-word; }
 
 /* Tables */
 table {

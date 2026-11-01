@@ -270,11 +270,12 @@ def test_default_tab_falls_back_when_no_perf(browser, site):
     try:
         page.goto(url)
         page.evaluate("localStorage.removeItem('simdref-c3-tab')")
-        # NEG (R32, R32) carries no measurements. It is not in the default
-        # search pool, so navigate through the live hashchange handler,
-        # which resolves the key through the catalog.
+        # AADD (M32, R32) carries no measurements (the integrated perf
+        # sources cover every NEG form now). It is not in the default search
+        # pool, so navigate through the live hashchange handler, which
+        # resolves the key through the catalog.
         page.wait_for_function("() => document.body.dataset.phase2 === 'done'", timeout=60_000)
-        page.evaluate("location.hash = '#x86%3Aneg%20(r32%2C%20r32)'")
+        page.evaluate("location.hash = '#x86%3Aaadd%20(m32%2C%20r32)'")
         page.wait_for_function(
             "() => document.querySelector('#detail .detail-head')", timeout=20_000
         )
@@ -335,14 +336,13 @@ def test_perf_summary_obeys_source_filter(browser, site):
         assert (mod != meas) or (mod == ""), (meas, mod)
         # ADDPS has no modeled rows: model-only chips show nothing for it.
         # Pick an entry that really has modeled data (arm abs is
-        # modeled-only in the export) and assert a non-empty summary.
-        page.evaluate("document.getElementById('isa-all').click()")
-        page.locator("#query").fill("abs wdorwzr")
-        page.wait_for_function("document.querySelectorAll('#results .result').length > 0")
-        page.evaluate(
-            "Array.from(document.querySelectorAll('#results .result'))"
-            ".find(r => r.dataset.key === 'arm:abs (<wdorwzr>, <wnorwzr>)')?.click()"
-        )
+        # modeled-only in the export) and assert a non-empty summary. The
+        # SVE forms replaced the schema-named records in the integrated
+        # catalog, so navigate by key instead of searching. Navigate afresh:
+        # a live query would keep the ADDPS detail from the steps above.
+        page.goto(url)
+        page.wait_for_function("() => document.body.dataset.phase2 === 'done'", timeout=60_000)
+        page.evaluate("location.hash = '#arm%3Aabs%20(z0.4s%2C%20p0%2Fm%2C%20z1.4s)'")
         page.wait_for_function(
             "() => document.querySelector('#detail .detail-head h2')?.textContent.includes('ABS')",
             timeout=15_000,
