@@ -20,7 +20,7 @@ from playwright.sync_api import Error as PlaywrightError, sync_playwright  # noq
 import sys
 
 sys.path.insert(0, str(Path(__file__).parent))
-from test_web_e2e import FIXTURE_SITE_DATA, SITE_DATA, _free_port, _populate_site, _serve  # noqa: E402
+from conftest import FIXTURE_SITE_DATA, SITE_DATA, _free_port, _populate_site, _serve  # noqa: E402
 
 # The R2 pin tests assert on real catalog entries (NEG's missing perf, ADDPS's
 # linked intrinsics and doc links, measured + modeled perf rows) that the
@@ -122,9 +122,14 @@ def test_f3_no_horizontal_overflow_at_390(browser, site):
             """Array.from(document.querySelectorAll('body *')).map(el => {
                 const r = el.getBoundingClientRect();
                 // A cell inside a table that scrolls horizontally in its own
-                // container is clipped, not page overflow: skip it.
+                // box is clipped, not page overflow: skip it. The box is the
+                // table's .perf-scroll wrapper, else the table element.
                 const table = el.closest('table');
-                if (table && table.closest('div, section, main') && table.scrollWidth > table.clientWidth) return null;
+                if (table && table.closest('div, section, main')) {
+                    const scroller = table.closest('.perf-scroll') || table;
+                    if (scroller.scrollWidth > scroller.clientWidth
+                        && getComputedStyle(scroller).overflowX !== 'visible') return null;
+                }
                 return (el.children.length === 0 || el.matches('header, button, input, main, aside, .results-list, .search-bar'))
                     && r.right > document.documentElement.clientWidth + 1 && r.width > 0
                     && getComputedStyle(el).display !== 'none'

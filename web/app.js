@@ -752,13 +752,14 @@ function renderLatencyPairs(measurements) {
     r.latencyPairs
       .map(p => `${esc(p.value)} (${esc(p.start)}->${esc(p.target)}${p.sameReg ? `, same reg ${esc(p.sameReg)}` : ""})`)
       .join(", ");
-  return renderTable(
+  return `<div class="perf-scroll">${renderTable(
     [
       {key: "uarch", label: "microarch", render: r => esc(uarchLabels[r.uarch] || r.uarch)},
+      {key: "source", label: "src"},
       {key: "latencyPairs", label: "latency per operand pair", render: pairCell},
     ],
     rows
-  );
+  )}</div>`;
 }
 
 function renderMeasurements(measurements) {
@@ -773,7 +774,7 @@ function renderMeasurements(measurements) {
     let inner = "";
     let gi = 0;
     for (const [family, frows] of groups) {
-      inner += `<details class="meas-group" ${gi++ === 0 && kind === splits[0][0] ? "open" : ""}><summary>${esc(family)} (${frows.length})</summary>${renderTable(measHeaders, frows)}</details>`;
+      inner += `<details class="meas-group" ${gi++ === 0 && kind === splits[0][0] ? "open" : ""}><summary>${esc(family)} (${frows.length})</summary><div class="perf-scroll">${renderTable(measHeaders, frows)}</div></details>`;
     }
     /* Provenance footnote: one "name version citation" line per distinct
        source in the panel. Rows without the fields add no line. */

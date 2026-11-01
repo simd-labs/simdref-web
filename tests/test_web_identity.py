@@ -38,7 +38,7 @@ import pytest
 pytest.importorskip("playwright.sync_api")
 from playwright.sync_api import sync_playwright  # noqa: E402
 
-from test_web_e2e import _QuietHandler, _free_port, _populate_site, _serve  # noqa: E402
+from conftest import _QuietHandler, _free_port, _populate_site, _serve  # noqa: E402
 from http.server import ThreadingHTTPServer  # noqa: E402
 
 REPO_ROOT = Path(__file__).parent.parent

@@ -162,6 +162,22 @@ assert(html.includes("llvm-mca 24.0.0"), `llvm-mca footer missing, got: ${html}`
 assert(html.includes("https://llvm.org/docs/CommandGuide/llvm-mca.html"),
        `citation link missing, got: ${html}`);
 
+/* FIXUI2 defect 1: the latency-per-pair table keeps the same compact src
+ * column as the main perf tables (same source field, same missing-value
+ * default). The pair table is the last table renderMeasurements returns. */
+rows[0].latencyPairs = [{value: "10", start: "xmm1", target: "xmm0"}];
+rows.push({uarch: "SKL", sourceKind: "measured", latency: "4", tpLoop: "1.0",
+           uops: "2", latencyPairs: [{value: "3", start: "rax", target: "rbx"}]});
+const withPairs = T.renderMeasurements(rows);
+const pairTable = withPairs.slice(withPairs.lastIndexOf("<table"));
+assert(pairTable.includes("latency per operand pair"),
+       `latency-pair table missing, got: ${withPairs}`);
+assert(pairTable.includes(">src<"), `pair table src header missing, got: ${pairTable}`);
+assert(pairTable.includes(">uops.info<"),
+       `pair table source label missing, got: ${pairTable}`);
+assert(pairTable.includes(">-<"),
+       `pair table missing-source default missing, got: ${pairTable}`);
+
 if (failures.length) {
   console.error("FAIL");
   for (const f of failures) console.error(" - " + f);
