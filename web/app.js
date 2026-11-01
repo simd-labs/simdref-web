@@ -668,10 +668,17 @@ function renderTable(headers, rows) {
 /* ── Measurement grouping ─────────────────────────────────────────── */
 const uarchOrder = ["ARL-P","ARL-E","MTL-P","MTL-E","EMR","ADL-P","ADL-E","RKL","TGL","ICL","CLX","CNL","SKX","CFL","KBL","SKL","BDW","HSW","IVB","SNB","ZEN5","ZEN4","ZEN3","ZEN2","ZEN+"];
 
-function uarchFamily(u) {
+function uarchFamily(row) {
+  /* Perf groups name the core's real vendor/family. The export labels
+   * each row (perf_family_label in src/simdref/perf.py, from cores.py
+   * core_architecture); the lists below cover rows from older exports,
+   * which only own x86 codes. Unknown cores never take a vendor label. */
+  if (row && row.family) return row.family;
+  const u = row && typeof row === "object" ? row.uarch : row;
   if (["ZEN5","ZEN4","ZEN3","ZEN2","ZEN+"].includes(u)) return "AMD";
   if (["EMR","CLX","SKX","CNL"].includes(u)) return "Intel Server";
-  return "Intel Client";
+  if (uarchOrder.includes(u)) return "Intel Client";
+  return "Other";
 }
 
 function groupMeasurements(rows) {
@@ -681,7 +688,7 @@ function groupMeasurements(rows) {
   });
   const groups = new Map();
   for (const r of sorted) {
-    const fam = uarchFamily(r.uarch);
+    const fam = uarchFamily(r);
     if (!groups.has(fam)) groups.set(fam, []);
     groups.get(fam).push(r);
   }
