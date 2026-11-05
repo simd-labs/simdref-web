@@ -113,6 +113,7 @@ body {
   font-family: ui-monospace, monospace;
 }
 .meta.stale { border-color: var(--accent); color: var(--accent); }
+.header-notice { color: var(--text-secondary); font-size: 0.8rem; }
 .kind-bar {
   display: flex;
   gap: 8px;
