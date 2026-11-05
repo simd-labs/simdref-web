@@ -41,11 +41,26 @@ const VIEWPORT_BUFFER_ROWS = 30;
 let virtualWrap = null;
 let virtualRange = { start: -1, end: -1 };
 
-/* Detail chunk caches: prefix -> Promise<data>. Separate maps for
- * instructions (detail-chunks/) and intrinsics (intrinsic-chunks/) so
- * colliding prefixes (e.g. "ADD") don't shadow each other. */
-const chunkCache = new Map();
-const intrinsicChunkCache = new Map();
+/* The data module (web/data.js) holds the search-index fetch, the detail
+ * chunk caches, the schema check and the measurement rows, so other pages
+ * can import it. app.js is a classic script, so it binds the exports for
+ * its call sites and starts the bootstrap once the import settles. */
+let fetchJson = null;
+let chunkPrefix = null;
+let loadChunk = null;
+let loadIntrinsic = null;
+let loadEncodingsShard = null;
+let schemaCheck = null;
+let prefetchIntrinsicChunks = null;
+const dataReady = import("./data.js").then((m) => {
+  fetchJson = m.fetchJson;
+  chunkPrefix = m.chunkPrefix;
+  loadChunk = m.loadChunk;
+  loadIntrinsic = m.loadIntrinsic;
+  loadEncodingsShard = m.loadEncodingsShard;
+  schemaCheck = m.schemaCheck;
+  prefetchIntrinsicChunks = m.prefetchIntrinsicChunks;
+});
 
 /* ISA state */
 let defaultEnabledIsas = new Set(["SSE", "AVX", "AVX-512"]);
@@ -535,25 +550,6 @@ function naturalCmp(a, b) {
   return 0;
 }
 
-/* ── gzip-aware fetch ─────────────────────────────────────────────────
- * Prefer a pre-compressed *.gz sidecar (so GitHub Pages & bare static
- * hosts don't need Content-Encoding: gzip), fall back to the raw .json.
- */
-async function fetchJson(path) {
-  const base = path.replace(/\.json$/, "");
-  if (typeof DecompressionStream !== "undefined") {
-    try {
-      const r = await fetch(`${base}.json.gz`);
-      if (r.ok) {
-        const ds = r.body.pipeThrough(new DecompressionStream("gzip"));
-        return await new Response(ds).json();
-      }
-    } catch (_) { /* fall through */ }
-  }
-  const r = await fetch(`${base}.json`);
-  return r.ok ? r.json() : null;
-}
-
 /* ── Columnar search index (inverse of simdref.export._columnar_*) ──── */
 function truncate80(t) { return t.length <= 80 ? t : t.slice(0, 79) + "…"; }
 
@@ -593,65 +589,6 @@ function decodeIntrinsics(s) {
     out[i] = e;
   }
   return out;
-}
-
-/* ── Lazy detail loading ──────────────────────────────────────────── */
-function chunkPrefix(mnemonic) {
-  const c = (mnemonic || "").trim().toUpperCase();
-  return c.length >= 3 ? c.slice(0, 3) : c;
-}
-
-/* Keep in sync with simdref.export._intrinsic_chunk_prefix. */
-function intrinsicChunkPrefix(name) {
-  let s = String(name || "").replace(/^_+/, "");
-  if (s.slice(0, 6).toLowerCase() === "riscv_") s = s.slice(6);
-  const m = s.match(/^(?:mm\d*|sv|vq?)_?/i);
-  if (m && m[0].length < s.length) s = s.slice(m[0].length);
-  s = s.replace(/^_+/, "");
-  const clean = (s.match(/[a-z0-9]/gi) || []).join("").toLowerCase();
-  if (clean.length < 2) return "misc";
-  return clean.slice(0, 3);
-}
-
-function loadChunk(prefix) {
-  if (chunkCache.has(prefix)) return chunkCache.get(prefix);
-  const p = fetchJson(`detail-chunks/${encodeURIComponent(prefix)}.json`)
-    .then(data => data || {})
-    .catch(() => ({}));
-  chunkCache.set(prefix, p);
-  return p;
-}
-
-function loadIntrinsicChunk(prefix) {
-  if (intrinsicChunkCache.has(prefix)) return intrinsicChunkCache.get(prefix);
-  const p = fetchJson(`intrinsic-chunks/${encodeURIComponent(prefix)}.json`)
-    .then(data => data || {})
-    .catch(() => ({}));
-  intrinsicChunkCache.set(prefix, p);
-  return p;
-}
-
-/* Fetch one intrinsic's full details (lazy, per-bucket). Returns the
- * detail entry or null if not found in its bucket (build skew). */
-async function loadIntrinsic(name) {
-  const chunk = await loadIntrinsicChunk(intrinsicChunkPrefix(name));
-  return chunk[name] || null;
-}
-
-/* Warm intrinsic-chunks for the top N visible hits during browser
- * idle time so clicking a result doesn't pay a network round-trip. */
-function prefetchIntrinsicChunks(entries) {
-  const schedule = window.requestIdleCallback || ((cb) => setTimeout(cb, 0));
-  const prefixes = new Set();
-  for (const e of entries) {
-    if (!e || e.kind !== "intrinsic") continue;
-    prefixes.add(intrinsicChunkPrefix(e.item.name));
-    if (prefixes.size >= 4) break;
-  }
-  for (const prefix of prefixes) {
-    if (intrinsicChunkCache.has(prefix)) continue;
-    schedule(() => { loadIntrinsicChunk(prefix); });
-  }
 }
 
 /* ── Render helpers ───────────────────────────────────────────────── */
@@ -1792,9 +1729,6 @@ window.addEventListener("hashchange", () => {
  *              joined into the search index in idle-time batches so the
  *              page stays responsive while ~93 k entries hydrate.
  */
-// Column-encoding version this build can decode. Bump alongside the matching
-// `decodeInstructions`/`decodeIntrinsics` rewrite when core changes the shape.
-const SUPPORTED_SCHEMA_VERSION = 1;
 
 function showLoadError(message) {
   console.error("simdref:", message);
@@ -1806,116 +1740,127 @@ function showLoadError(message) {
   window.__loadError = true;
 }
 
-const _intrinsicsFetch = fetchJson("search-index-intrinsics.json").then(decodeIntrinsics).catch((err) => {
-  console.error("simdref: failed to load intrinsic search shard", err);
-  return null;
-});
+/* Start the catalog bootstrap once the data module's exports are bound.
+ * If the import fails, the .catch after the chain shows the load error. */
+let _intrinsicsFetch = null;
+dataReady.then(() => {
+  _intrinsicsFetch = fetchJson("search-index-intrinsics.json").then(decodeIntrinsics).catch((err) => {
+    console.error("simdref: failed to load intrinsic search shard", err);
+    return null;
+  });
 
-Promise.all([
-  fetchJson("search-index-meta.json"),
-  fetchJson("search-index-instructions.json").then(decodeInstructions),
-  fetchJson("filter_spec.json").catch(() => null),
-  fetchJson("build_stamp.json").catch(() => null),
-])
-  .then(([meta, instructions, spec, stamp]) => {
-    if (stamp && stamp.schema_version !== SUPPORTED_SCHEMA_VERSION) {
-      showLoadError(
-        `Catalog export is schema v${stamp.schema_version}, this build reads v${SUPPORTED_SCHEMA_VERSION}. Rebuild the site data.`,
-      );
-      return;
-    }
-    const data = meta || {};
-    data.instructions = instructions || [];
-    data.intrinsics = [];  // populated in Phase 2
-    catalog = data;
-    // Prefer filter_spec.json (single source of truth) over embedded isa_config.
-    const config = spec || data.isa_config || {};
-    defaultEnabledIsas = new Set(config.default_enabled || [...defaultEnabledIsas]);
-    FAMILY_SUB_ORDER = config.family_sub_order || {};
-    DEFAULT_SUBS = Object.fromEntries(Object.entries(config.default_subs || {}).map(([family, values]) => [family, new Set(values)]));
-    isaFamilyOrder = config.family_order || {};
-    ARCH_PRESETS = config.presets && typeof config.presets === "object" ? config.presets : {};
-    if (stamp && metaNode) {
-      const stale = stamp.catalog_generated_at && data.generated_at && stamp.catalog_generated_at !== data.generated_at;
-      const label = stamp.git_sha ? `build ${stamp.git_sha}` : `v${stamp.version || ""}`;
-      metaNode.textContent = label;
-      metaNode.title = `Catalog ${stamp.catalog_generated_at || "?"}${stale ? " (stale)" : ""}`;
-      metaNode.dataset.stamp = label;
-      if (stale) metaNode.classList.add("stale");
-    }
-    catalog.intrByName = Object.create(null);
-    catalog.instrByKey = Object.fromEntries(data.instructions.map(i => [i.key, i]));
-    catalog.instrByDisplayKey = Object.fromEntries(data.instructions.map(i => [i.display_key || i.key, i]));
-    catalog.instrByMnem = Object.fromEntries(data.instructions.map(i => [i.mnemonic, i]));
+  Promise.all([
+    fetchJson("search-index-meta.json"),
+    fetchJson("search-index-instructions.json").then(decodeInstructions),
+    fetchJson("filter_spec.json").catch(() => null),
+    fetchJson("build_stamp.json").catch(() => null),
+  ])
+    .then(([meta, instructions, spec, stamp]) => {
+      const schemaError = schemaCheck(stamp);
+      if (schemaError) {
+        showLoadError(schemaError);
+        return;
+      }
+      const data = meta || {};
+      data.instructions = instructions || [];
+      data.intrinsics = [];  // populated in Phase 2
+      catalog = data;
+      // Prefer filter_spec.json (single source of truth) over embedded isa_config.
+      const config = spec || data.isa_config || {};
+      defaultEnabledIsas = new Set(config.default_enabled || [...defaultEnabledIsas]);
+      FAMILY_SUB_ORDER = config.family_sub_order || {};
+      DEFAULT_SUBS = Object.fromEntries(Object.entries(config.default_subs || {}).map(([family, values]) => [family, new Set(values)]));
+      isaFamilyOrder = config.family_order || {};
+      ARCH_PRESETS = config.presets && typeof config.presets === "object" ? config.presets : {};
+      if (stamp && metaNode) {
+        const stale = stamp.catalog_generated_at && data.generated_at && stamp.catalog_generated_at !== data.generated_at;
+        const label = stamp.git_sha ? `build ${stamp.git_sha}` : `v${stamp.version || ""}`;
+        metaNode.textContent = label;
+        metaNode.title = `Catalog ${stamp.catalog_generated_at || "?"}${stale ? " (stale)" : ""}`;
+        metaNode.dataset.stamp = label;
+        if (stale) metaNode.classList.add("stale");
+      }
+      catalog.intrByName = Object.create(null);
+      catalog.instrByKey = Object.fromEntries(data.instructions.map(i => [i.key, i]));
+      catalog.instrByDisplayKey = Object.fromEntries(data.instructions.map(i => [i.display_key || i.key, i]));
+      catalog.instrByMnem = Object.fromEntries(data.instructions.map(i => [i.mnemonic, i]));
 
-    searchEntries = data.instructions.map(i => ({
-      kind: "instruction", key: i.key, title: i.display_key || i.key, subtitle: i.summary || "", item: i,
-      fields: i.search_fields || [i.display_mnemonic || i.mnemonic || "", i.display_form || i.form || "", i.summary || "", i.display_isa || displayIsa(i.isa)],
-    }));
+      searchEntries = data.instructions.map(i => ({
+        kind: "instruction", key: i.key, title: i.display_key || i.key, subtitle: i.summary || "", item: i,
+        fields: i.search_fields || [i.display_mnemonic || i.mnemonic || "", i.display_form || i.form || "", i.summary || "", i.display_isa || displayIsa(i.isa)],
+      }));
 
-    buildSearchIndexes(searchEntries);
+      buildSearchIndexes(searchEntries);
 
-    // Seed the filter chips from the meta shard so the union of ISA
-    // families is correct from first paint, not just instruction families.
-    const seededIsas = Array.isArray(data.available_isas) && data.available_isas.length
-      ? data.available_isas
-      : [...new Set(searchEntries.flatMap(e => e.item.isa_families || []))];
-    availableIsas = [...new Set(seededIsas)]
-      .sort((a, b) => (isaFamilyOrder[a] ?? 99) - (isaFamilyOrder[b] ?? 99) || a.localeCompare(b));
-    enabledIsas = new Set([...defaultEnabledIsas].filter(v => availableIsas.includes(v)));
-    initEnabledSubIsas();
+      // Seed the filter chips from the meta shard so the union of ISA
+      // families is correct from first paint, not just instruction families.
+      const seededIsas = Array.isArray(data.available_isas) && data.available_isas.length
+        ? data.available_isas
+        : [...new Set(searchEntries.flatMap(e => e.item.isa_families || []))];
+      availableIsas = [...new Set(seededIsas)]
+        .sort((a, b) => (isaFamilyOrder[a] ?? 99) - (isaFamilyOrder[b] ?? 99) || a.localeCompare(b));
+      enabledIsas = new Set([...defaultEnabledIsas].filter(v => availableIsas.includes(v)));
+      initEnabledSubIsas();
 
-    renderIsaFilters();
+      renderIsaFilters();
 
-    // Preset selection precedence:
-    //   1. ?preset=NAME URL param (always wins — shareable link)
-    //   2. last-used preset in localStorage (remember the user's choice)
-    //   3. "intel" on first load (smaller result set, fewer chips)
-    try {
-      const params = new URLSearchParams(location.search);
-      const urlPreset = params.get("preset");
-      let stored = null;
-      try { stored = localStorage.getItem("simdref-last-preset"); } catch (_) { /* ignore */ }
-      const candidate = (urlPreset && ARCH_PRESETS[urlPreset]) ? urlPreset
-                      : (stored && ARCH_PRESETS[stored]) ? stored
-                      : (ARCH_PRESETS["intel"] ? "intel" : null);
-      if (candidate) applyIsaPreset(candidate);
-    } catch (_) { /* ignore malformed URL */ }
+      // Preset selection precedence:
+      //   1. ?preset=NAME URL param (always wins — shareable link)
+      //   2. last-used preset in localStorage (remember the user's choice)
+      //   3. "intel" on first load (smaller result set, fewer chips)
+      try {
+        const params = new URLSearchParams(location.search);
+        const urlPreset = params.get("preset");
+        let stored = null;
+        try { stored = localStorage.getItem("simdref-last-preset"); } catch (_) { /* ignore */ }
+        const candidate = (urlPreset && ARCH_PRESETS[urlPreset]) ? urlPreset
+                        : (stored && ARCH_PRESETS[stored]) ? stored
+                        : (ARCH_PRESETS["intel"] ? "intel" : null);
+        if (candidate) applyIsaPreset(candidate);
+      } catch (_) { /* ignore malformed URL */ }
 
-    // Empty-query behaviour pins against this state. Perf kinds count as
-    // default ["measured","modeled"] even if localStorage narrows them.
-    _filterSnapshot = _snapshotFilters(["measured", "modeled"]);
+      // Empty-query behaviour pins against this state. Perf kinds count as
+      // default ["measured","modeled"] even if localStorage narrows them.
+      _filterSnapshot = _snapshotFilters(["measured", "modeled"]);
 
-    rebuildVisibleSet();
+      rebuildVisibleSet();
 
-    // Build-stamp badge text is set above if a stamp is present; only fall
-    // back to the catalog-size summary when no stamp was emitted.
-    if (!metaNode.dataset.stamp) {
-      // Intrinsic count is filled in by Phase 2 once the shard arrives.
-      metaNode.textContent = `${data.instructions.length} instructions`;
-    }
+      // Build-stamp badge text is set above if a stamp is present; only fall
+      // back to the catalog-size summary when no stamp was emitted.
+      if (!metaNode.dataset.stamp) {
+        // Intrinsic count is filled in by Phase 2 once the shard arrives.
+        metaNode.textContent = `${data.instructions.length} instructions`;
+      }
 
-    // An exact entry key is a deep link, not a search query: leave the box
-    // empty so renderResults opens the entry instead of matching the key
-    // as text and rendering "No results".
-    const fromHash = decodeURIComponent(location.hash.replace(/^#/, ""));
-    if (fromHash && !_hashEntry(fromHash)) {
-      // The hash can name an intrinsic Phase 2 has not ingested yet: hold
-      // the search fallback until the shard is in, then open the entry.
-      intrinsicsReady = _ingestIntrinsics(metaNode).then(() => {
-        if (decodeURIComponent(location.hash.replace(/^#/, "")) === fromHash && !queryInput.value) {
-          if (!_hashEntry(fromHash)) queryInput.value = fromHash;
-          renderResults();
-        }
-      });
-    } else {
-      intrinsicsReady = _ingestIntrinsics(metaNode);
-    }
-    renderResults();
-  })
+      // An exact entry key is a deep link, not a search query: leave the box
+      // empty so renderResults opens the entry instead of matching the key
+      // as text and rendering "No results".
+      const fromHash = decodeURIComponent(location.hash.replace(/^#/, ""));
+      if (fromHash && !_hashEntry(fromHash)) {
+        // The hash can name an intrinsic Phase 2 has not ingested yet: hold
+        // the search fallback until the shard is in, then open the entry.
+        intrinsicsReady = _ingestIntrinsics(metaNode).then(() => {
+          if (decodeURIComponent(location.hash.replace(/^#/, "")) === fromHash && !queryInput.value) {
+            if (!_hashEntry(fromHash)) queryInput.value = fromHash;
+            renderResults();
+          }
+        });
+      } else {
+        intrinsicsReady = _ingestIntrinsics(metaNode);
+      }
+      renderResults();
+    })
+    .catch((err) => {
+      // Fetch failure (CORS, 404, gzip misconfig) should not leave "Loading..." up forever.
+      console.error("simdref: failed to load catalog", err);
+      showLoadError("Could not load the search index. Open the browser console for details.");
+    });
+
+})
   .catch((err) => {
-    // Fetch failure (CORS, 404, gzip misconfig) should not leave "Loading..." up forever.
-    console.error("simdref: failed to load catalog", err);
+    // The data module itself failed to load: the bootstrap above never ran,
+    // so this is the only load error that reaches the page.
+    console.error("simdref: failed to load the data module", err);
     showLoadError("Could not load the search index. Open the browser console for details.");
   });
 
@@ -2018,7 +1963,7 @@ function _ingestIntrinsics(metaNode) {
 }
 
 /* ── Annotate tab ────────────────────────────────────────────────────
- * Client-side port of src/simdref/annotate.py. Reuses the existing
+ * Client-side port of src/simdref/annotate.py. Reuses the data module's
  * fetchJson, chunkPrefix, loadChunk helpers. Zero backend.
  */
 const ANN_INSTR_RE = /^(?<indent>[ \t]*)(?<mnemonic>[A-Za-z][A-Za-z0-9_.]*)(?:[ \t]+(?<operands>[^#\n]*?))?(?:[ \t]*(?<trailing>#.*))?$/;
@@ -2052,21 +1997,11 @@ const IDENTITY_ISAS = Object.freeze({
   riscv: { arch: "riscv64" },
 });
 
-let _encodingsShardPromise = null;
-function loadEncodingsShard() {
-  if (!_encodingsShardPromise) {
-    _encodingsShardPromise = fetchJson("search-index-encodings.json")
-      .then(rows => (Array.isArray(rows) && rows.length ? rows : null))
-      .catch(() => null);
-  }
-  return _encodingsShardPromise;
-}
-
 let _identityWorker = null;
 let _identityInitError = null;
 
 function _newIdentityWorker(rows) {
-  const worker = new Worker("identity.js");  // classic: importScripts loads lines.js
+  const worker = new Worker("identity.js", { type: "module" });  // module: imports lines.js
   const state = { worker, seq: 0, pending: new Map(), ready: null };
   state.ready = new Promise((resolve) => {
     /* A script that fails to load (404, syntax error) fires onerror
@@ -2232,13 +2167,6 @@ function lookupForms(mnemonic, isa) {
     if (forms.length) return forms;
   }
   return [];
-}
-
-async function measurementsForEntry(entry) {
-  const prefix = chunkPrefix(entry.mnemonic);
-  const chunk = await loadChunk(prefix);
-  const record = chunk && chunk[entry.key];
-  return (record && Array.isArray(record.measurements)) ? record.measurements : [];
 }
 
 function _operandWidthTokens(operands) {

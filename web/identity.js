@@ -8,7 +8,7 @@
 
 "use strict";
 
-importScripts("lines.js");  // splitAsmLines: the line rule app.js shares
+import { splitAsmLines } from "./lines.js";  // the line rule app.js shares
 
 /* The four binaries are release assets of the simd-labs/visualizer tag
  * wasm-v1 (its SHA256SUMS file lists these digests). The deploy copies
@@ -78,7 +78,7 @@ function push(map, key, value) {
   bucket.push(value);
 }
 
-function buildShard(rows) {
+export function buildShard(rows) {
   const index = { a64: [], rv: new Map(), iform: new Map() };
   for (const row of rows) {
     const bits = row.enc_bits || 0;
@@ -833,7 +833,7 @@ function* zip(a, b) {
   for (let i = 0; i < Math.min(a.length, b.length); i++) yield [a[i], b[i]];
 }
 
-async function identifyDocument(tools, text, arch) {
+export async function identifyDocument(tools, text, arch) {
   /* splitAsmLines (lines.js) numbers the lines exactly as app.js
    * splits the document for rendering, so the rows join on the same
    * line index. */
@@ -866,7 +866,12 @@ async function identifyDocument(tools, text, arch) {
 
 let tools = null;
 
-self.onmessage = async (event) => {
+/* In a browser this file is the dedicated worker's script and the
+ * message port drives the API. Imported as a plain module (node, or
+ * another page bundling the lookup) the port stays off and the lookup
+ * functions stay importable. */
+if (typeof WorkerGlobalScope !== "undefined" && self instanceof WorkerGlobalScope) {
+  self.onmessage = async (event) => {
   const msg = event.data;
   if (msg.type === "init") {
     try {
@@ -892,4 +897,5 @@ self.onmessage = async (event) => {
       self.postMessage({ type: "run-failed", seq: msg.seq, error: String(e && e.message || e) });
     }
   }
-};
+  };
+}

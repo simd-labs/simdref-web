@@ -4,8 +4,12 @@
  * \r\n, \r and the other line terminators end a line and never ride
  * on it, and a document ending in a terminator has no phantom last
  * line. */
-function splitAsmLines(text) {
+export function splitAsmLines(text) {
   const lines = text.split(/\r\n|[\n\r\x0b\x0c\x1c\x1d\x1e\x85\u2028\u2029]/);
   if (lines[lines.length - 1] === "") lines.pop();
   return lines;
 }
+
+/* app.js loads this file as a module script and reaches the splitter
+ * through the global; the identity worker imports it directly. */
+globalThis.splitAsmLines = splitAsmLines;

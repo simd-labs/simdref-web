@@ -40,7 +40,7 @@ jobs:
           fi
 
       - name: node --check web/app.js
-        run: node --check web/app.js && node --check web/lines.js && node --check web/identity.js
+        run: node --check web/app.js && node --check web/lines.js && node --check web/identity.js && node --check web/data.js
 
       - name: Download the byte-identity wasm tools (wasm-v1 release)
         # Verify each file against the release's own SHA256SUMS, same as
