@@ -2494,6 +2494,45 @@ function _renderAnnStatus() {
  * of overwriting the new text's rows. */
 let _annDocSeq = 0;
 
+/* Annotate hover: the simdref record behind each annotated line (the
+ * form's catalog entry plus its measurement rows). Each annotated output
+ * line is a <span> tagged with its index into _annHoverRecs, so the .sa
+ * payload (textContent of #ann-output) never carries the record. */
+let _annHoverRecs = [];
+let _annHoverLine = null;
+const annHoverPop = document.createElement("div");
+annHoverPop.id = "ann-hover-pop";
+annHoverPop.hidden = true;
+document.body.appendChild(annHoverPop);
+
+function hideAnnHover() {
+  annHoverPop.hidden = true;
+  _annHoverLine = null;
+}
+
+/* The same pieces the detail view renders: the guarded summary
+ * (formatAnnotation) and the per-core table (renderTable + measHeaders). */
+function annotateHoverHtml(entry, measurements) {
+  const summary = formatAnnotation(entry, measurements, { docs: true, perf: false });
+  return `<div class="ann-hover-key"><a class="xref" href="#${encodeURIComponent(entry.key)}">${esc(entry.key)}</a></div>`
+    + (summary ? `<div class="ann-hover-sum">${esc(summary)}</div>` : "")
+    + (measurements.length ? `<div class="perf-scroll">${renderTable(measHeaders, measurements)}</div>` : "");
+}
+
+function showAnnHover(line) {
+  const rec = _annHoverRecs[Number(line.dataset.annH)];
+  if (!rec) return hideAnnHover();
+  annHoverPop.innerHTML = annotateHoverHtml(rec.entry, rec.measurements);
+  annHoverPop.hidden = false;
+  const r = line.getBoundingClientRect();
+  const pr = annHoverPop.getBoundingClientRect();
+  let top = r.bottom + 4;
+  if (top + pr.height > window.innerHeight - 8) top = Math.max(8, r.top - pr.height - 4);
+  annHoverPop.style.top = top + "px";
+  annHoverPop.style.left = Math.max(8, Math.min(r.left, window.innerWidth - pr.width - 8)) + "px";
+  _annHoverLine = line;
+}
+
 /* One render pass over a parsed document. identityResults null renders
  * the regex/width matcher (the site without identity data); an array
  * upgrades every row to the byte-identity pick. docSeq guards the
@@ -2546,6 +2585,8 @@ async function renderAnnotateOutput(parsed, isa, identityResults, docSeq) {
   const opts = readAnnotateOpts();
   let known = 0, unknown = 0;
   const outLines = [];
+  _annHoverRecs.length = 0;
+  hideAnnHover();
   let lineNo = 0;
   for (const p of parsed) {
     lineNo++;
@@ -2577,7 +2618,8 @@ async function renderAnnotateOutput(parsed, isa, identityResults, docSeq) {
       continue;
     }
     known++;
-    outLines.push(`${highlightAsm(p.raw, isa)}   <span class="hl-comment"># ${escAnn(annotation)}</span>`);
+    const hoverI = _annHoverRecs.push({ entry: form, measurements }) - 1;
+    outLines.push(`<span class="ann-line" data-ann-h="${hoverI}">${highlightAsm(p.raw, isa)}   <span class="hl-comment"># ${escAnn(annotation)}</span></span>`);
   }
   if (docSeq !== _annDocSeq) return;  // a newer document annotated meanwhile
   out.innerHTML = outLines.join("\n");
@@ -2737,6 +2779,7 @@ function wireAnnotateTab() {
     _annDocSeq++;
     $("ann-input").value = "";
     $("ann-output").textContent = "";
+    hideAnnHover();
     /* Clear goes through the shared render so the span keeps showing
      * the current identity state (preparing / ready / unavailable) and
      * the warm-up settle can still rewrite it while it prepares. */
@@ -2800,6 +2843,18 @@ function wireAnnotateTab() {
       selectAllIn(e.currentTarget);
     }
   });
+  /* Line hover: the annotated line's simdref record in the popover.
+   * Unknown lines carry no data-ann-h tag and show nothing. */
+  $("ann-output").addEventListener("mouseover", (e) => {
+    /* The target can be a Text node (hljs spans wrap bare text). */
+    const el = e.target.nodeType === 1 ? e.target : e.target.parentElement;
+    const line = el ? el.closest("[data-ann-h]") : null;
+    if (line && line !== _annHoverLine) showAnnHover(line);
+    else if (!line) hideAnnHover();
+  });
+  /* No mouseleave on the output: the popover floats over the following
+   * lines, so the pointer can move into it to read or scroll. */
+  annHoverPop.addEventListener("mouseleave", hideAnnHover);
 
   wireSplitter();
   restoreAnnotateOpts();

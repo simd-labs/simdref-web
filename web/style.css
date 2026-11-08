@@ -929,6 +929,27 @@ body.ann-resizing { cursor: col-resize; user-select: none; }
 /* Let highlight.js colour tokens, but keep our background / padding. */
 #ann-output .hljs { background: transparent; padding: 0; color: inherit; }
 
+/* Annotate line hover: the annotated line highlights, the record
+ * (form key, summary, per-core table) shows in the fixed popover. */
+#ann-output .ann-line:hover { background: var(--accent-soft); }
+#ann-hover-pop {
+  position: fixed;
+  z-index: 60;
+  max-width: min(620px, calc(100vw - 16px));
+  max-height: min(440px, calc(100vh - 16px));
+  overflow: auto;
+  padding: 0.5rem 0.7rem;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+  font-size: 0.82rem;
+}
+#ann-hover-pop table { width: auto; min-width: 100%; }
+.ann-hover-key { margin-bottom: 0.3rem; }
+.ann-hover-sum { color: var(--text-secondary); margin-bottom: 0.4rem; }
+
 @media (max-width: 900px) {
   .annotate-panes { grid-template-columns: 1fr; grid-auto-rows: 1fr; }
   .ann-splitter   { display: none; }
