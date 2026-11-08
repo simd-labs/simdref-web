@@ -936,7 +936,9 @@ body.ann-resizing { cursor: col-resize; user-select: none; }
   position: fixed;
   z-index: 60;
   max-width: min(620px, calc(100vw - 16px));
-  max-height: min(440px, calc(100vh - 16px));
+  /* Absolute guard; showAnnHover caps at the free space on the side it
+     opens, so a long table scrolls instead of leaving the viewport. */
+  max-height: calc(100vh - 16px);
   overflow: auto;
   padding: 0.5rem 0.7rem;
   background: var(--surface);

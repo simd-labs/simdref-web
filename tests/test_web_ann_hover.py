@@ -152,3 +152,99 @@ def test_copy_sa_payload_unchanged(annotate_page):
         assert len(lines) == 3
         assert lines[0].startswith("addq %rax, %rbx   # ")
         assert lines[2] == "foobarq %rax, %rbx   # ??"
+
+
+# 34 annotated lines push the last line to the bottom of an 800px viewport.
+LONG_SAMPLE = "\n".join(["addq %rax, %rbx"] * 34)
+
+
+@pytest.fixture()
+def annotate_page_bottom(browser, tmp_path):
+    """The long sample at 1280x800: the last annotated line sits at the
+    bottom of the viewport, so a popover below it cannot fit."""
+    site = tmp_path / "site"
+    _populate_site(site)
+    port = _free_port()
+    with _serve(site, port):
+        page = browser.new_page(viewport={"width": 1280, "height": 800})
+        try:
+            page.goto(f"http://127.0.0.1:{port}/")
+            page.wait_for_function("() => document.body.dataset.phase2 === 'done'", timeout=60_000)
+            page.evaluate("() => { document.body.dataset.tab = 'annotate'; }")
+            page.evaluate(
+                "(doc) => { document.querySelector('#ann-input').value = doc;"
+                " document.querySelector('#ann-isa').value = 'x86'; runAnnotate(); }",
+                LONG_SAMPLE,
+            )
+            page.wait_for_function(
+                "() => document.querySelector('#ann-status').textContent.includes('annotated')",
+                timeout=30_000,
+            )
+            page.wait_for_function(
+                "() => document.querySelector('#ann-status').textContent.includes('unavailable')",
+                timeout=60_000,
+            )
+            yield page
+        finally:
+            page.close()
+
+
+def test_hover_last_line_popover_stays_in_viewport(annotate_page_bottom):
+    """Near the bottom of the viewport the popover opens above the line,
+    caps at the viewport with overflow-y auto, and its last table row is
+    fully visible once the box is scrolled to the bottom."""
+    page = annotate_page_bottom
+    if not HAS_DETAIL:
+        pytest.skip("no detail data served: no table to cap")
+    out = page.locator("#ann-output")
+    n = out.locator(".ann-line").count()
+    assert n == 34
+    last = out.locator(".ann-line").nth(n - 1)
+    # Scroll the output to the bottom. A large finite value: assigning
+    # Infinity is converted to 0 by the WebIDL unsigned-long setter.
+    page.evaluate("() => { document.querySelector('#ann-output').scrollTop = 100000; }")
+    page.wait_for_timeout(200)
+    line_box = last.bounding_box()
+    # The sample is long enough that the last line sits at the pane
+    # bottom, near the viewport bottom: opening below it cannot fit.
+    assert line_box["y"] + line_box["height"] > 800 - 50
+
+    last.hover()
+    page.wait_for_function("() => !document.querySelector('#ann-hover-pop').hidden", timeout=5_000)
+    page.wait_for_timeout(200)
+    pop_box = page.evaluate(
+        """() => {
+          const r = document.querySelector('#ann-hover-pop').getBoundingClientRect();
+          return {top: r.top, bottom: r.bottom, left: r.left,
+                  right: r.right, height: r.height};
+        }"""
+    )
+    # The box lies fully inside the 1280x800 viewport and opened above
+    # the line (no room below).
+    assert pop_box["top"] >= 0
+    assert pop_box["bottom"] <= 800
+    assert pop_box["left"] >= 0
+    assert pop_box["right"] <= 1280
+    assert pop_box["top"] < line_box["y"]
+    # The cap is the viewport, not the old fixed 440px height.
+    assert pop_box["height"] > 440
+
+    # The table is longer than the box: scrolling to the bottom puts the
+    # last row fully inside the box, not clipped mid-row.
+    page.evaluate(
+        "() => { const p = document.querySelector('#ann-hover-pop');"
+        " p.scrollTop = p.scrollHeight; }"
+    )
+    page.wait_for_timeout(200)
+    geom = page.evaluate(
+        """() => {
+          const pop = document.querySelector('#ann-hover-pop');
+          const pr = pop.getBoundingClientRect();
+          const rows = pop.querySelectorAll('table tr');
+          const lr = rows[rows.length - 1].getBoundingClientRect();
+          return {popTop: pr.top, popBottom: pr.bottom,
+                  rowTop: lr.top, rowBottom: lr.bottom};
+        }"""
+    )
+    assert geom["rowTop"] >= geom["popTop"] - 1
+    assert geom["rowBottom"] <= geom["popBottom"] + 1

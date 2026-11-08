@@ -2525,10 +2525,19 @@ function showAnnHover(line) {
   annHoverPop.innerHTML = annotateHoverHtml(rec.entry, rec.measurements);
   annHoverPop.hidden = false;
   const r = line.getBoundingClientRect();
+  const gap = 4, edge = 8;
+  /* Reset any cap from a previous hover so the natural height is
+     measured; the CSS max-height is the absolute guard. */
+  annHoverPop.style.maxHeight = "";
   const pr = annHoverPop.getBoundingClientRect();
-  let top = r.bottom + 4;
-  if (top + pr.height > window.innerHeight - 8) top = Math.max(8, r.top - pr.height - 4);
-  annHoverPop.style.top = top + "px";
+  /* Open on the side with more room and cap the box at that room: the
+     table is longer than either side in a short window, the box must
+     stay inside the viewport, and it must not cover the hovered line. */
+  const below = window.innerHeight - edge - r.bottom - gap;
+  const above = r.top - gap - edge;
+  const h = Math.min(pr.height, below >= above ? below : above);
+  annHoverPop.style.maxHeight = h + "px";
+  annHoverPop.style.top = (below >= above ? r.bottom + gap : r.top - gap - h) + "px";
   annHoverPop.style.left = Math.max(8, Math.min(r.left, window.innerWidth - pr.width - 8)) + "px";
   _annHoverLine = line;
 }
