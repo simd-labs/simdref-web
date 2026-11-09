@@ -81,6 +81,12 @@ body {
   font-family: var(--font-body);
   font-size: 14px;
   line-height: 1.5;
+  /* One column that fills the window; the bars above .layout take what
+     they need and .layout gets the rest, so no offset can go stale. */
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
 }
 
 /* Header */
@@ -345,7 +351,8 @@ body {
 .layout {
   display: grid;
   grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
-  height: calc(100vh - 90px);
+  flex: 1 1 auto;
+  min-height: 0;
   overflow: hidden;
 }
 
@@ -795,7 +802,7 @@ body:not([data-tab="annotate"]) #annotate-view { display: none; }
   flex-direction: column;
   gap: 0.5rem;
   padding: 0.75rem 1rem 1rem;
-  height: calc(100vh - 56px);
+  flex: 1 1 auto;
   min-height: 400px;
 }
 .annotate-toolbar {
@@ -955,7 +962,7 @@ body.ann-resizing { cursor: col-resize; user-select: none; }
 @media (max-width: 900px) {
   .annotate-panes { grid-template-columns: 1fr; grid-auto-rows: 1fr; }
   .ann-splitter   { display: none; }
-  #annotate-view  { height: auto; }
+  #annotate-view  { height: auto; flex: none; }
   #ann-input      { min-height: 220px; }
   #ann-output     { min-height: 220px; }
 }
@@ -990,7 +997,9 @@ button.perf-line { background: none; border: none; padding: 0; text-align: left;
 /* E1: results-or-detail, one at a time (mobile) */
 #back-results { display: none; }
 @media (max-width: 768px) {
-  /* Mobile page scroll: reset the fixed-height clip .layout has on desktop. */
+  /* Mobile page scroll: reset the fixed-height clip the desktop body and
+     .layout rules put on the page. */
+  body { height: auto; }
   .layout { display: block; height: auto; overflow: visible; }
   body:not([data-mobile-view="detail"]) .detail-panel:not(:has(.detail-empty)) { display: none; }
   body[data-mobile-view="detail"] .results-panel { display: none; }
