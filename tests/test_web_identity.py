@@ -830,7 +830,9 @@ def test_warmup_shows_identity_preparing_before_annotate(browser, tmp_path):
     Annotate click: wasm responses delayed 10 s, the status reads
     'byte identity preparing…' while the worker loads and
     'byte identity ready' when it settles. b82c7eb warms silently, so
-    the status span stays empty and the preparing wait times out."""
+    the status span stays empty and the preparing wait times out. The
+    waits poll on an interval: rAF-driven polling can stall on a settled
+    headless page and then never re-read the status."""
     site = tmp_path / "site"
     _build_site(site)
     port = _free_port()
@@ -846,12 +848,14 @@ def test_warmup_shows_identity_preparing_before_annotate(browser, tmp_path):
             page.wait_for_function(
                 "() => document.querySelector('#ann-status').textContent.includes('preparing')",
                 timeout=8_000,
+                polling=100,
             )
             if SHOT_DIR:
                 page.screenshot(path=str(Path(SHOT_DIR) / "warmup-preparing.png"))
             page.wait_for_function(
                 "() => document.querySelector('#ann-status').textContent.includes('ready')",
                 timeout=30_000,
+                polling=100,
             )
         finally:
             page.close()
@@ -1017,6 +1021,7 @@ def test_clear_keeps_the_identity_status(browser, tmp_path):
             page.wait_for_function(
                 "() => document.querySelector('#ann-status').textContent.includes('preparing')",
                 timeout=15_000,
+                polling=100,
             )
             # The worker starts fetching the wasm a beat after the note.
             # The sync driver runs route handlers only while the main
@@ -1044,6 +1049,7 @@ def test_clear_keeps_the_identity_status(browser, tmp_path):
             page.wait_for_function(
                 "() => document.querySelector('#ann-status').textContent.includes('ready')",
                 timeout=60_000,
+                polling=100,
             )
         finally:
             release_held(context)
