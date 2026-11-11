@@ -1,28 +1,33 @@
 {
-  "n": 2,
+  "n": 6,
   "cols": {
-    "name": ["_mm_add_ps", "_mm256_add_ps"],
-    "isa": [0, 1],
-    "arch": [0, 0],
-    "perf": [0, 0],
-    "desc": [0, 1],
-    "ins": [0, 1],
-    "prim": [0, 1],
-    "arm": [-1, -1],
-    "cat": [-1, -1]
+    "name": ["_mm_add_ps", "_mm256_add_ps", "__shfl_sync", "__shfl_down_sync", "__shfl_up_sync", "__shfl_xor_sync"],
+    "isa": [0, 1, 2, 2, 2, 2],
+    "arch": [0, 0, 1, 1, 1, 1],
+    "perf": [0, 0, 0, 0, 0, 0],
+    "desc": [0, 1, 2, 3, 4, 5],
+    "ins": [0, 1, 2, 3, 4, 5],
+    "prim": [0, 1, 2, 3, 4, 5],
+    "arm": [-1, -1, -1, -1, -1, -1],
+    "cat": [-1, -1, -1, -1, -1, -1]
   },
   "isa": [
     [["SSE"], "SSE", ["SSE"], ["SSE"]],
-    [["AVX"], "AVX", ["AVX"], ["AVX"]]
+    [["AVX"], "AVX", ["AVX"], ["AVX"]],
+    [["CUDA"], "CUDA", ["CUDA"], []]
   ],
-  "arch": [["x86", "x86"]],
+  "arch": [["x86", "x86"], ["cuda", "CUDA"]],
   "perf": [["2", "0.50"]],
   "desc": [
     "Add packed single-precision floating-point values in a and b.",
-    "Performs a SIMD addition of eight packed single-precision floating-point elements in m1 and m2."
+    "Performs a SIMD addition of eight packed single-precision floating-point elements in m1 and m2.",
+    "Each warp thread reads a 32-bit value from the lane given by srcLane.",
+    "Each warp thread reads a 32-bit value from the lane at srcLane minus delta.",
+    "Each warp thread reads a 32-bit value from the lane at srcLane plus delta.",
+    "Each warp thread reads a 32-bit value from the lane srcLane XOR mask."
   ],
-  "ins": ["ADDPS (XMM, XMM)", "VADDPS (YMM, YMM, YMM)"],
-  "prim": ["x86:addps (xmm, xmm)", "x86:vaddps (ymm, ymm, ymm)"],
+  "ins": ["ADDPS (XMM, XMM)", "VADDPS (YMM, YMM, YMM)", "SHFL IDX (member, lane, width)", "SHFL DOWN (member, delta, width)", "SHFL UP (member, delta, width)", "SHFL XOR (member, mask, width)"],
+  "prim": ["x86:addps (xmm, xmm)", "x86:vaddps (ymm, ymm, ymm)", "cuda:shfl (idx, lane, width)", "cuda:shfl (down, delta, width)", "cuda:shfl (up, delta, width)", "cuda:shfl (xor, mask, width)"],
   "arm": [],
   "cat": [],
   "fields": {},

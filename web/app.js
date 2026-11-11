@@ -1616,6 +1616,7 @@ if ($("isa-intel")) $("isa-intel").addEventListener("click", () => _pickPreset("
 if ($("isa-arm32")) $("isa-arm32").addEventListener("click", () => _pickPreset("arm32"));
 if ($("isa-arm64")) $("isa-arm64").addEventListener("click", () => _pickPreset("arm64"));
 if ($("isa-riscv")) $("isa-riscv").addEventListener("click", () => _pickPreset("riscv"));
+if ($("isa-cuda")) $("isa-cuda").addEventListener("click", () => _pickPreset("cuda"));
 $("isa-none").addEventListener("click", () => _pickPreset("none"));
 $("isa-all").addEventListener("click", () => _pickPreset("all"));
 
@@ -1801,6 +1802,19 @@ dataReady.then(() => {
         .sort((a, b) => (isaFamilyOrder[a] ?? 99) - (isaFamilyOrder[b] ?? 99) || a.localeCompare(b));
       enabledIsas = new Set([...defaultEnabledIsas].filter(v => availableIsas.includes(v)));
       initEnabledSubIsas();
+
+      // Ensure a CUDA preset exists so the CUDA button can select only the
+      // CUDA family. Derive the family name from the same availableIsas list
+      // the CUDA chip reads, so it stays in sync with the data.
+      if (!ARCH_PRESETS["cuda"]) {
+        const cudaFamily = availableIsas.find((f) => f.toLowerCase() === "cuda") || "CUDA";
+        ARCH_PRESETS["cuda"] = {
+          families: [cudaFamily],
+          subs: [],
+          kind: ["intrinsic", "instruction"],
+          arm_arch: null,
+        };
+      }
 
       renderIsaFilters();
 
