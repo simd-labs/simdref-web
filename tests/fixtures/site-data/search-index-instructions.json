@@ -10,11 +10,12 @@
     "sum": [
       "Add packed single-precision floating-point values.",
       "Add packed single-precision floating-point values.",
-      "shfl.sync.b32 instruction in Data Movement and Conversion Instructions. Qualifier sets: mode. Introduced in PTX ISA 6.0. Requires sm_30 or higher."
+      "shfl.sync.b32 instruction in Data Movement and Conversion Instructions. Qualifier sets: mode. Introduced in PTX ISA 6.0. Requires sm_70 or higher."
     ],
     "isa": [0, 1, 2],
     "arch": [0, 0, 1],
-    "perf": [0, 0, 1]
+    "perf": [0, 0, 1],
+    "sm": [0, -1, 1]
   },
   "isa": [
     [["SSE"], "SSE", ["SSE"], ["SSE"]],
@@ -23,6 +24,7 @@
   ],
   "arch": [["x86", "x86"], ["ptx", "ptx"]],
   "perf": [["2", "0.50"], ["-", "-"]],
+  "sm": ["sm_90", "sm_70"],
   "fields": {},
   "summaries": {}
 }

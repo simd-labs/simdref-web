@@ -95,6 +95,18 @@ let ARCH_PRESETS = {};
 let enabledArmArch = null; // null = no filter; Set of "A32"|"A64"|"BOTH" when active
 let activeCategory = null; // null = no filter; Intel intrinsic category when set
 
+/* SM floor facet. smLevels comes from the export's FilterSpec.sm_levels
+   (no hand list); the choice filters CUDA/PTX rows by their shard "sm"
+   floor and persists in storage like the preset choice. */
+let smLevels = [];
+let activeSm = null; // null = no filter; one "sm_XX" string from sm_levels
+function persistSm() {
+  try {
+    if (activeSm) localStorage.setItem("simdref-sm", activeSm);
+    else localStorage.removeItem("simdref-sm");
+  } catch (_) { /* ignore */ }
+}
+
 /* ── Theme ────────────────────────────────────────────────────────── */
 function getEffectiveTheme() {
   const stored = localStorage.getItem("simdref-theme");
@@ -209,6 +221,33 @@ function armArchVisible(item) {
   return bucket !== null && enabledArmArch.has(bucket);
 }
 
+/* The numeric level of an "sm_XX" floor string. Same split-based parse
+   as simdref filters.sm_number: a suffix letter stays in the label but
+   not in the number ("sm_90a" is 90). A string with no digits reads as
+   NaN and hides its row. */
+function smNumber(value) {
+  const text = String(value).trim().split("_").pop();
+  let digits = "";
+  for (const ch of text) {
+    if (ch < "0" || ch > "9") break;
+    digits += ch;
+  }
+  return digits ? parseInt(digits, 10) : NaN;
+}
+
+/* simdref filters.runs_on_sm, per family: a CUDA or PTX row passes its
+   floor when the floor is null or at most the chosen level. Rows of
+   other families are not filtered. */
+function smRowVisible(item) {
+  if (!activeSm) return true;
+  const smRow = (item.isa_families || []).some((f) => {
+    const lo = String(f).toLowerCase();
+    return lo === "cuda" || lo === "ptx";
+  });
+  if (!smRow || !item.sm) return true;
+  return smNumber(item.sm) <= smNumber(activeSm);
+}
+
 /* ── Bucket indexes (built once after load) ─────────────────────────
  * Filter toggles intersect small buckets instead of scanning ~140k
  * entries. Buckets:
@@ -303,6 +342,11 @@ function rebuildVisibleSet() {
     for (const i of catCand) if (cand.has(i)) intersect.add(i);
     for (const i of passthrough) intersect.add(i);
     cand = intersect;
+  }
+
+  if (activeSm) {
+    // SM floor gate: only CUDA/PTX rows with a too-high floor hide.
+    cand = _filterSet(cand, (i) => smRowVisible(searchEntries[i].item));
   }
 
   visibleSet = cand;
@@ -583,12 +627,15 @@ function decodeInstructions(s) {
     const [lat, cpi] = s.perf[c.perf[i]];
     const display_key = c.dkey[i], display_form = c.dform[i] || display_key, form = c.form[i] || display_form;
     const display_mnemonic = c.dmn[i], mnemonic = c.mn[i] || display_mnemonic, full = c.sum[i];
-    out[i] = {
+    const e = {
       key: c.key[i] || architecture + ":" + form.toLowerCase(), mnemonic, form, architecture,
       summary: s.summaries[i] ?? truncate80(full), isa, lat, cpi, display_architecture, display_key, display_form,
       display_mnemonic, display_isa, isa_families, isa_subs,
       search_fields: s.fields[i] || [display_mnemonic, display_key, display_form, full, display_isa],
     };
+    // Exports without the sm column predate the SM floor contract.
+    if (c.sm && c.sm[i] >= 0) e.sm = s.sm[c.sm[i]];
+    out[i] = e;
   }
   return out;
 }
@@ -608,6 +655,8 @@ function decodeIntrinsics(s) {
     if (c.arm[i] >= 0) e.arm_arch = s.arm[c.arm[i]];
     if (c.cat[i] >= 0) e.category = s.cat[c.cat[i]];
     if (c.sub && c.sub[i] >= 0) e.subcategory = s.sub[c.sub[i]];
+    // Exports without the sm column predate the SM floor contract.
+    if (c.sm && c.sm[i] >= 0) e.sm = s.sm[c.sm[i]];
     out[i] = e;
   }
   return out;
@@ -1163,6 +1212,7 @@ function _snapshotFilters(perfKinds) {
     enabledArmArch === null ? null : [...enabledArmArch].sort(),
     [...enabledKinds].sort(),
     (perfKinds || [...enabledPerfKinds]).sort(),
+    activeSm,
   ]);
 }
 function filtersModifiedByUser() {
@@ -1244,7 +1294,41 @@ function renderIsaFilters() {
       scheduleFilterRender();
     });
   }
+  renderSmChips();
   updateIsaSummary();
+}
+
+/* The SM chip appears only for a CUDA or PTX selection, and only when
+   the export lists sm_levels. The level chips come from that list alone. */
+function smChipVisible() {
+  if (!smLevels.length) return false;
+  if (enableAllIsas) return true;
+  return availableIsas.some((f) => {
+    const lo = String(f).toLowerCase();
+    return (lo === "cuda" || lo === "ptx") && enabledIsas.has(f);
+  });
+}
+
+function renderSmChips() {
+  const group = $("sm-group");
+  const wrap = $("sm-chips");
+  if (!group || !wrap) return;
+  group.hidden = !smChipVisible();
+  wrap.innerHTML = ["", ...smLevels].map((level) => {
+    const picked = activeSm === (level || null);
+    return `<label class="isa-chip ${picked ? "active" : ""}">
+      <input type="radio" name="sm-level" value="${esc(level)}" ${picked ? "checked" : ""}>
+      ${level ? esc(level) : "any"}
+    </label>`;
+  }).join("");
+  for (const cb of wrap.querySelectorAll("input[name=sm-level]")) {
+    cb.addEventListener("change", () => {
+      activeSm = cb.value || null;
+      persistSm();
+      visibleSet = null;
+      scheduleFilterRender();
+    });
+  }
 }
 
 function applyIsaPreset(mode) {
@@ -1328,6 +1412,42 @@ document.addEventListener("click", (e) => {
 });
 if (_mq768.matches && location.hash) document.body.dataset.mobileView = "detail";
 
+function _queryPool(query) {
+  const visible = searchEntries.filter((_, i) => visibleSet.has(i));
+  const cids = candidateIndexes(query);
+  const pool = cids == null ? visible : cids.filter(i => visibleSet.has(i)).map(i => searchEntries[i]);
+  return pool
+    .map(e => ({...e, score: rankEntry(query, e)}))
+    .filter(e => Number.isFinite(e.score) && e.score >= 35)
+    .sort((a, b) =>
+      b.score - a.score
+      || (a.kind !== b.kind ? (a.kind === "instruction" ? -1 : 1) : 0)
+      || (() => { const [aa,ab] = isaSortKey(a.item.display_isa_tokens || a.item.isa); const [ba,bb] = isaSortKey(b.item.display_isa_tokens || b.item.isa); return aa-ba||ab-bb; })()
+      || naturalCmp(a.title, b.title)
+      || a.title.length - b.title.length
+    )
+    .slice(0, 5000);
+}
+
+/* An empty result the SM filter caused reads as one line naming the
+   hidden count: the pool the query would show with the filter off. */
+function smHiddenNote(query) {
+  for (const note of resultsNode.querySelectorAll(".sm-hidden-note")) note.remove();
+  if (!activeSm || resultPool.length) return;
+  if (!query && !filtersModifiedByUser()) return;
+  const saved = activeSm;
+  activeSm = null;
+  visibleSet = null;
+  rebuildVisibleSet();
+  const hidden = query ? _queryPool(query).length : searchEntries.filter((_, i) => visibleSet.has(i)).length;
+  activeSm = saved;
+  visibleSet = null;
+  rebuildVisibleSet();
+  if (hidden > 0) {
+    resultsNode.insertAdjacentHTML("beforeend", `<div class="sm-hidden-note" role="status">${hidden} rows hidden by the SM filter</div>`);
+  }
+}
+
 function renderResults() {
   const query = queryInput.value.trim();
   if (!catalog) return;
@@ -1339,20 +1459,7 @@ function renderResults() {
     // Empty query, user-touched filters: browse the visible set like main.
     resultPool = searchEntries.filter((_, i) => visibleSet.has(i));
   } else {
-    const visible = searchEntries.filter((_, i) => visibleSet.has(i));
-    const cids = candidateIndexes(query);
-    const pool = cids == null ? visible : cids.filter(i => visibleSet.has(i)).map(i => searchEntries[i]);
-    resultPool = pool
-      .map(e => ({...e, score: rankEntry(query, e)}))
-      .filter(e => Number.isFinite(e.score) && e.score >= 35)
-      .sort((a, b) =>
-        b.score - a.score
-        || (a.kind !== b.kind ? (a.kind === "instruction" ? -1 : 1) : 0)
-        || (() => { const [aa,ab] = isaSortKey(a.item.display_isa_tokens || a.item.isa); const [ba,bb] = isaSortKey(b.item.display_isa_tokens || b.item.isa); return aa-ba||ab-bb; })()
-        || naturalCmp(a.title, b.title)
-        || a.title.length - b.title.length
-      )
-      .slice(0, 5000);
+    resultPool = _queryPool(query);
   }
 
   renderedCount = 0;
@@ -1361,6 +1468,7 @@ function renderResults() {
   renderVisibleResults(true);
   syncResultsCount(query);
   prefetchIntrinsicChunks(resultPool.slice(0, 16));
+  smHiddenNote(query);
 
   // Auto-select. A hash the app wrote itself (auto-selection, row click)
   // is not a deep link: on the plain start page it gets dropped instead
@@ -1793,6 +1901,8 @@ dataReady.then(() => {
       DEFAULT_SUBS = Object.fromEntries(Object.entries(config.default_subs || {}).map(([family, values]) => [family, new Set(values)]));
       isaFamilyOrder = config.family_order || {};
       ARCH_PRESETS = config.presets && typeof config.presets === "object" ? config.presets : {};
+      // The SM chip list comes from FilterSpec.sm_levels alone.
+      smLevels = Array.isArray(config.sm_levels) ? [...config.sm_levels] : [];
       if (stamp && metaNode) {
         const stale = stamp.catalog_generated_at && data.generated_at && stamp.catalog_generated_at !== data.generated_at;
         const label = stamp.git_sha ? `build ${stamp.git_sha}` : `v${stamp.version || ""}`;
@@ -1852,6 +1962,12 @@ dataReady.then(() => {
                         : (ARCH_PRESETS["intel"] ? "intel" : null);
         if (candidate) applyIsaPreset(candidate);
       } catch (_) { /* ignore malformed URL */ }
+
+      // The SM floor choice restores from storage like the preset choice.
+      try {
+        const storedSm = localStorage.getItem("simdref-sm");
+        activeSm = storedSm && smLevels.includes(storedSm) ? storedSm : null;
+      } catch (_) { /* ignore */ }
 
       // Empty-query behaviour pins against this state. Perf kinds count as
       // default ["measured","modeled"] even if localStorage narrows them.

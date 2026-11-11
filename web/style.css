@@ -307,6 +307,8 @@ body {
   column-gap: 0.5rem;
   row-gap: 0.2rem;
 }
+/* .isa-group's display beats the UA rule for [hidden]. */
+#sm-group[hidden] { display: none; }
 .isa-group-label {
   font-size: 0.7rem;
   font-weight: 600;
@@ -377,6 +379,11 @@ body {
   overflow-y: auto;
   flex: 1;
   outline: none;
+}
+.sm-hidden-note {
+  padding: 0.6rem 0.75rem;
+  font-size: 0.82rem;
+  color: var(--text-muted);
 }
 .result {
   padding: 0.35rem 0.75rem;
