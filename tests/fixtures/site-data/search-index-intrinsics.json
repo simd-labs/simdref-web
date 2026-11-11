@@ -1,22 +1,23 @@
 {
-  "n": 6,
+  "n": 7,
   "cols": {
-    "name": ["_mm_add_ps", "_mm256_add_ps", "__shfl_sync", "__shfl_down_sync", "__shfl_up_sync", "__shfl_xor_sync"],
-    "isa": [0, 1, 2, 2, 2, 2],
-    "arch": [0, 0, 1, 1, 1, 1],
-    "perf": [0, 0, 0, 0, 0, 0],
-    "desc": [0, 1, 2, 3, 4, 5],
-    "ins": [0, 1, 2, 3, 4, 5],
-    "prim": [0, 1, 2, 3, 4, 5],
-    "arm": [-1, -1, -1, -1, -1, -1],
-    "cat": [-1, -1, -1, -1, -1, -1]
+    "name": ["_mm_add_ps", "_mm256_add_ps", "__shfl_sync", "__shfl_down_sync", "__shfl_up_sync", "__shfl_xor_sync", "vadd_s32"],
+    "isa": [0, 1, 2, 2, 2, 2, 3],
+    "arch": [0, 0, 1, 1, 1, 1, 2],
+    "perf": [0, 0, 0, 0, 0, 0, 0],
+    "desc": [0, 1, 2, 3, 4, 5, 6],
+    "ins": [0, 1, 2, 3, 4, 5, 6],
+    "prim": [0, 1, 2, 3, 4, 5, -1],
+    "arm": [-1, -1, -1, -1, -1, -1, -1],
+    "cat": [-1, -1, -1, -1, -1, -1, -1]
   },
   "isa": [
     [["SSE"], "SSE", ["SSE"], ["SSE"]],
     [["AVX"], "AVX", ["AVX"], ["AVX"]],
-    [["CUDA"], "CUDA", ["CUDA"], []]
+    [["CUDA"], "CUDA", ["CUDA"], []],
+    [["NEON"], "NEON", ["Arm"], ["NEON"]]
   ],
-  "arch": [["x86", "x86"], ["cuda", "CUDA"]],
+  "arch": [["x86", "x86"], ["cuda", "CUDA"], ["arm", "Arm"]],
   "perf": [["2", "0.50"]],
   "desc": [
     "Add packed single-precision floating-point values in a and b.",
@@ -24,10 +25,11 @@
     "Each warp thread reads a 32-bit value from the lane given by srcLane.",
     "Each warp thread reads a 32-bit value from the lane at srcLane minus delta.",
     "Each warp thread reads a 32-bit value from the lane at srcLane plus delta.",
-    "Each warp thread reads a 32-bit value from the lane srcLane XOR mask."
+    "Each warp thread reads a 32-bit value from the lane srcLane XOR mask.",
+    "Add corresponding elements of two vectors."
   ],
-  "ins": ["ADDPS (XMM, XMM)", "VADDPS (YMM, YMM, YMM)", "SHFL IDX (member, lane, width)", "SHFL DOWN (member, delta, width)", "SHFL UP (member, delta, width)", "SHFL XOR (member, mask, width)"],
-  "prim": ["x86:addps (xmm, xmm)", "x86:vaddps (ymm, ymm, ymm)", "cuda:shfl (idx, lane, width)", "cuda:shfl (down, delta, width)", "cuda:shfl (up, delta, width)", "cuda:shfl (xor, mask, width)"],
+  "ins": ["ADDPS (XMM, XMM)", "VADDPS (YMM, YMM, YMM)", "SHFL IDX (member, lane, width)", "SHFL DOWN (member, delta, width)", "SHFL UP (member, delta, width)", "SHFL XOR (member, mask, width)", "VADD (Dd, Dn, Dm)"],
+  "prim": ["x86:addps (xmm, xmm)", "x86:vaddps (ymm, ymm, ymm)", "ptx:shfl.sync.b32 d[|p], a, b, c, membermask", "cuda:shfl (down, delta, width)", "cuda:shfl (up, delta, width)", "cuda:shfl (xor, mask, width)"],
   "arm": [],
   "cat": [],
   "fields": {},

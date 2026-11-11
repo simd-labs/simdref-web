@@ -143,6 +143,30 @@ function displayIsa(values) {
   return Array.isArray(values) ? (values.join(", ") || "-") : String(values || "-");
 }
 
+// Arch and ISA badges: the second renders only when its text differs from
+// the first, because a CUDA row names the same string on both.
+function resultIsaBadges(item) {
+  const arch = item.display_architecture || item.architecture || "-";
+  const isa = item.display_isa || displayIsa(item.isa);
+  return `<span class="result-isa">${esc(arch)}</span>`
+    + (isa === arch ? "" : `<span class="result-isa">${esc(isa)}</span>`);
+}
+
+function kvArchIsa(item) {
+  const arch = item.display_architecture || item.architecture;
+  const isa = item.display_isa || displayIsa(item.isa);
+  return kvChip("Arch", arch) + (isa === arch ? "" : kvChip("ISA", isa));
+}
+
+// Doc-sections heading: name the doc source the record carries. Arm doc
+// sections come from the ACLE. A record with no doc source gets a plain
+// heading.
+function docSectionTitle(detail) {
+  if (String(detail.architecture || "").toLowerCase() === "arm") return "ACLE documentation";
+  const src = (detail.metadata || {}).doc_source;
+  return src ? `${src.replaceAll("-", " ")} documentation` : "Documentation";
+}
+
 function defaultSubsForFamily(family) {
   const order = FAMILY_SUB_ORDER[family] || [];
   const defaults = DEFAULT_SUBS[family] || new Set(order);
@@ -302,8 +326,7 @@ function resultMarkup(entries, offset = 0) {
     <article class="result ${e.kind}-kind ${e.key === activeKey ? "active" : ""} ${offset + i === focusedIndex ? "focused" : ""}" data-key="${esc(e.key)}" data-index="${offset + i}">
       <div class="result-top">
         <span class="result-kind ${e.kind}">${esc(e.kind)}</span>
-        <span class="result-isa">${esc(e.item.display_architecture || e.item.architecture || "-")}</span>
-        <span class="result-isa">${esc(e.item.display_isa || displayIsa(e.item.isa))}</span>
+        ${resultIsaBadges(e.item)}
       </div>
       <div class="result-title">${esc(e.title)}</div>
       <div class="result-meta">
@@ -354,8 +377,7 @@ function _rowMarkup(entry, index) {
   return `<article class="result ${entry.kind}-kind ${entry.key === activeKey ? "active" : ""} ${index === focusedIndex ? "focused" : ""}" data-key="${esc(entry.key)}" data-index="${index}" style="top:${index * ROW_HEIGHT_PX}px">
       <div class="result-top">
         <span class="result-kind ${entry.kind}">${esc(entry.kind)}</span>
-        <span class="result-isa">${esc(entry.item.display_architecture || entry.item.architecture || "-")}</span>
-        <span class="result-isa">${esc(entry.item.display_isa || displayIsa(entry.item.isa))}</span>
+        ${resultIsaBadges(entry.item)}
       </div>
       <div class="result-title">${esc(entry.title)}</div>
       <div class="result-meta">
@@ -926,8 +948,7 @@ function renderIntrinsicDetail(item, detail) {
     <section class="section">
       <h3>Metadata</h3>
       <div class="kv-compact">
-        ${kvChip("Arch", item.display_architecture || item.architecture)}
-        ${kvChip("ISA", item.display_isa || displayIsa(item.isa))}
+        ${kvArchIsa(item)}
         ${item.header ? kvChip("Header", item.header) : ""}
         ${item.category ? kvChip("Category", item.subcategory ? `${item.subcategory} / ${item.category}` : item.category) : ""}
         ${meta.masking ? kvChip("Masking", meta.masking) : ""}
@@ -965,7 +986,7 @@ function renderIntrinsicDetail(item, detail) {
       ) : `<div style="color:var(--text-muted);font-size:0.82rem">No linked instructions.</div>`}
     </section>
     ${detail && detail.doc_sections && Object.keys(detail.doc_sections).length ? `<section class="section">
-      <h3>ACLE Documentation</h3>
+      <h3>${esc(docSectionTitle(detail))}</h3>
       ${renderDescriptionSections(detail.doc_sections)}
     </section>` : ""}
     ${detail && detail._instrDescription && Object.keys(detail._instrDescription).length ? `<section class="section">
@@ -1026,8 +1047,7 @@ function renderInstructionDetail(item, detail) {
       <div class="kv-compact">
         ${kvChip("Mnemonic", item.display_mnemonic || item.mnemonic)}
         ${kvChip("Form", d.display_form || item.display_form || d.form || item.form)}
-        ${kvChip("Arch", item.display_architecture || item.architecture)}
-        ${kvChip("ISA", item.display_isa || displayIsa(item.isa))}
+        ${kvArchIsa(item)}
         ${meta.category ? kvChip("Category", meta.category) : ""}
         ${meta.cpl ? kvChip("CPL", meta.cpl) : ""}
         ${meta.masking ? kvChip("Masking", meta.masking) : ""}
@@ -1104,7 +1124,7 @@ async function renderDetail(entry) {
         detail._operands = instrDetail.operand_details || [];
         detail._instrDescription = instrDetail.description || {};
         detail._instructionMeta = instrDetail.metadata || {};
-        detail._linkedInstruction = instrDetail.display_form || instr.display_key || instr.key || "";
+        detail._linkedInstruction = instrDetail.display_mnemonic || instr.display_mnemonic || instr.mnemonic || instrDetail.display_form || instr.display_key || instr.key || "";
         detail._pdfRefs = instrDetail.pdf_refs || [];
       }
     }

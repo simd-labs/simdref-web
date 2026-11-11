@@ -1,0 +1,24 @@
+{
+  "ptx:shfl.sync.b32 d[|p], a, b, c, membermask": {
+    "architecture": "ptx",
+    "description": {
+      "Syntax": "shfl.sync.mode.b32  d[|p], a, b, c, membermask;"
+    },
+    "display_architecture": "ptx",
+    "display_form": "d[|p], a, b, c, membermask",
+    "display_isa": "PTX",
+    "display_mnemonic": "shfl.sync.b32",
+    "form": "d[|p], a, b, c, membermask",
+    "isa": ["PTX"],
+    "linked_intrinsics": ["__shfl_sync", "__shfl_up_sync", "__shfl_xor_sync"],
+    "measurements": [],
+    "metadata": {
+      "ptx_isa": "6.0",
+      "sm": "sm_30"
+    },
+    "mnemonic": "shfl.sync.b32",
+    "operand_details": [],
+    "pdf_refs": [],
+    "summary": "shfl.sync.b32 instruction in Data Movement and Conversion Instructions. Qualifier sets: mode. Introduced in PTX ISA 6.0. Requires sm_30 or higher."
+  }
+}

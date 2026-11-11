@@ -7,7 +7,9 @@
     "display_isa_tokens": [
       "SSE"
     ],
-    "doc_sections": {},
+    "doc_sections": {
+      "Description": "Adds packed single-precision floating-point values in a and b."
+    },
     "header": "xmmintrin.h",
     "instruction_refs": [
       {
@@ -66,5 +68,30 @@
     "notes": [],
     "signature": "__m256 _mm256_add_ps(__m256 m1, __m256 m2)",
     "url": "https://www.intel.com/content/www/us/en/docs/intrinsics-guide/index.html#text=_mm256_add_ps"
+  },
+  "vadd_s32": {
+    "architecture": "arm",
+    "description": "Add (vector). This instruction adds corresponding elements in the two source SIMD&FP registers and writes the results to the destination register.",
+    "display_architecture": "Arm",
+    "display_isa": "NEON",
+    "display_isa_tokens": [
+      "NEON"
+    ],
+    "doc_sections": {
+      "ACLE Operation": "CheckFPAdvSIMDEnabled64();\nbits(datasize) operand1 = V[n];\nbits(datasize) operand2 = V[m];\nfor e = 0 to elements-1\n    Elem[result, e, esize] = Elem[operand1, e, esize] + Elem[operand2, e, esize];"
+    },
+    "header": "arm_neon.h",
+    "instruction_refs": [],
+    "instructions": [],
+    "isa": [
+      "NEON"
+    ],
+    "metadata": {
+      "classification_path": "Vector arithmetic / Add / Addition"
+    },
+    "name": "vadd_s32",
+    "notes": [],
+    "signature": "int32x2_t vadd_s32(int32x2_t a, int32x2_t b)",
+    "url": "https://developer.arm.com/architectures/instruction-sets/intrinsics/vadd_s32"
   }
 }

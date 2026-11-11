@@ -1,0 +1,72 @@
+{
+  "__shfl_sync": {
+    "architecture": "cuda",
+    "description": "Warp shuffle functions exchange a value between non-exited threads within a warp without the use of shared memory.",
+    "display_architecture": "CUDA",
+    "display_isa": "CUDA",
+    "display_isa_tokens": ["CUDA"],
+    "doc_sections": {
+      "Description": "Each warp thread reads a 32-bit value from the lane given by srcLane.",
+      "Parameters": "unsigned mask, T value, int srcLane, int width=warpSize"
+    },
+    "header": "__clang_cuda_intrinsics.h",
+    "instruction_refs": [
+      {
+        "architecture": "ptx",
+        "display_key": "shfl.sync.b32 d[|p], a, b, c, membermask",
+        "form": "",
+        "key": "ptx:shfl.sync.b32 d[|p], a, b, c, membermask",
+        "match_count": "1",
+        "name": "shfl.sync.idx.b32",
+        "resolution": "ptx-spelling",
+        "xed": ""
+      }
+    ],
+    "instructions": ["shfl.sync.b32 d[|p], a, b, c, membermask"],
+    "isa": ["CUDA"],
+    "metadata": {
+      "doc_source": "cuda-guide"
+    },
+    "name": "__shfl_sync",
+    "notes": [],
+    "signature": "T __shfl_sync (unsigned mask, T value, int srcLane, int width=warpSize);",
+    "url": "https://docs.nvidia.com/cuda/cuda-programming-guide/05-appendices/cpp-language-extensions.html#warp-shuffle-functions"
+  },
+  "__shfl_up_sync": {
+    "architecture": "cuda",
+    "description": "The value held by the thread at the resulting lane ID is returned.",
+    "display_architecture": "CUDA",
+    "display_isa": "CUDA",
+    "display_isa_tokens": ["CUDA"],
+    "doc_sections": {
+      "Description": "The source lane index does not wrap around the value of width."
+    },
+    "header": "__clang_cuda_intrinsics.h",
+    "instruction_refs": [],
+    "instructions": [],
+    "isa": ["CUDA"],
+    "metadata": {},
+    "name": "__shfl_up_sync",
+    "notes": [],
+    "signature": "T __shfl_up_sync (unsigned mask, T value, unsigned int delta, int width=warpSize);",
+    "url": "https://docs.nvidia.com/cuda/cuda-programming-guide/05-appendices/cpp-language-extensions.html#warp-shuffle-functions"
+  },
+  "__shfl_xor_sync": {
+    "architecture": "cuda",
+    "description": "The source lane index is the caller's lane ID XOR laneMask.",
+    "display_architecture": "CUDA",
+    "display_isa": "CUDA",
+    "display_isa_tokens": ["CUDA"],
+    "doc_sections": {
+      "Description": "This mode implements a butterfly addressing pattern."
+    },
+    "header": "__clang_cuda_intrinsics.h",
+    "instruction_refs": [],
+    "instructions": [],
+    "isa": ["CUDA"],
+    "metadata": {},
+    "name": "__shfl_xor_sync",
+    "notes": [],
+    "signature": "T __shfl_xor_sync (unsigned mask, T value, int laneMask, int width=warpSize);"
+  }
+}
