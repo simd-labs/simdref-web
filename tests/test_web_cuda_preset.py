@@ -53,6 +53,20 @@ def test_cuda_preset_selects_only_cuda_family(browser, page_url):
         label = page.locator("#isa-summary").inner_text()
         assert label == "ISA: CUDA", f"expected 'ISA: CUDA', got {label!r}"
 
+        # At phone width (390x844) the preset row must wrap inside the
+        # viewport: every .preset-btn lies inside the viewport and keeps a
+        # single-line height equal to the first button.
+        page.set_viewport_size({"width": 390, "height": 844})
+        page.wait_for_timeout(200)
+        btns = page.eval_on_selector_all(
+            ".isa-presets .preset-btn",
+            "els => els.map(e => e.getBoundingClientRect())",
+        )
+        assert all(b["right"] <= 390 for b in btns), f"preset buttons overflow viewport: {btns}"
+        assert all(abs(b["height"] - btns[0]["height"]) < 1 for b in btns), (
+            f"preset buttons have differing heights: {btns}"
+        )
+
         # A search for __shfl_sync lists only CUDA results.
         page.locator("#query").fill("__shfl_sync")
         page.wait_for_timeout(400)
