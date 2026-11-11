@@ -21,7 +21,13 @@ import pytest
 
 pytest.importorskip("playwright.sync_api")
 
-from conftest import SITE_DATA, _free_port, _populate_site, _serve  # noqa: E402
+from conftest import (  # noqa: E402
+    FIXTURE_SITE_DATA,
+    SITE_DATA,
+    _free_port,
+    _populate_site,
+    _serve,
+)
 
 SAMPLE = "addq %rax, %rbx\nvaddps %ymm2, %ymm1, %ymm0\nfoobarq %rax, %rbx"
 
@@ -39,6 +45,23 @@ BASE_SA = (
 HAS_DETAIL = (SITE_DATA / "detail-chunks" / "ADD.json").exists()
 
 
+def _add_add_form(site: Path) -> None:
+    """The committed fixture index carries no ADD form, so the sample's
+    addq line annotates as unknown there. Give the served copy one (the
+    same per-site index mutation test_identity_upgrades_rows_in_background
+    uses); a real export already has it."""
+    if SITE_DATA != FIXTURE_SITE_DATA:
+        return
+    index = json.loads((site / "search-index-instructions.json").read_text())
+    index["n"] += 1
+    index["cols"]["dkey"].append("ADD (R64, R64)")
+    index["cols"]["dmn"].append("ADD")
+    index["cols"]["sum"].append("Add 64-bit integer operands.")
+    for name in ("dform", "form", "mn", "key", "isa", "arch", "perf"):
+        index["cols"][name].append(0)
+    (site / "search-index-instructions.json").write_text(json.dumps(index))
+
+
 def _record_for(key: str) -> dict | None:
     """The served export's detail record for a matched form key."""
     mnemonic = key.split(":", 1)[1].split(" ")[0].upper()
@@ -54,6 +77,7 @@ def annotate_page(browser, tmp_path):
     (the harness serves no wasm, so the base render is final)."""
     site = tmp_path / "site"
     _populate_site(site)
+    _add_add_form(site)
     port = _free_port()
     with _serve(site, port):
         page = browser.new_page(viewport={"width": 1280, "height": 900})
@@ -164,6 +188,7 @@ def annotate_page_bottom(browser, tmp_path):
     bottom of the viewport, so a popover below it cannot fit."""
     site = tmp_path / "site"
     _populate_site(site)
+    _add_add_form(site)
     port = _free_port()
     with _serve(site, port):
         page = browser.new_page(viewport={"width": 1280, "height": 800})
