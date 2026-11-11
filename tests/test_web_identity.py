@@ -348,13 +348,16 @@ def test_missing_worker_script_falls_back(browser, tmp_path):
         try:
             page.add_init_script("window.__simdrefWasmBase = location.origin + '/wasm-v1/';")
             page.goto(f"http://127.0.0.1:{port}/")
-            page.wait_for_function("() => document.body.dataset.phase2 === 'done'", timeout=60_000)
+            page.wait_for_function(
+                "() => document.body.dataset.phase2 === 'done'", timeout=60_000, polling=100
+            )
             page.evaluate(
                 "() => { document.querySelector('#ann-input').value = 'addq %rax, %rbx'; return runAnnotate(); }"
             )
             page.wait_for_function(
                 "() => document.querySelector('#ann-status').textContent.includes('annotated')",
                 timeout=30_000,
+                polling=100,
             )
             status = page.locator("#ann-status").text_content()
             assert "byte identity unavailable" in status, status
@@ -375,13 +378,16 @@ def test_sha256_mismatch_refuses_wasm(browser, tmp_path):
         try:
             page.add_init_script("window.__simdrefWasmBase = location.origin + '/wasm-v1/';")
             page.goto(f"http://127.0.0.1:{port}/")
-            page.wait_for_function("() => document.body.dataset.phase2 === 'done'", timeout=60_000)
+            page.wait_for_function(
+                "() => document.body.dataset.phase2 === 'done'", timeout=60_000, polling=100
+            )
             page.evaluate(
                 "() => { document.querySelector('#ann-input').value = 'addq %rax, %rbx'; return runAnnotate(); }"
             )
             page.wait_for_function(
                 "() => document.querySelector('#ann-status').textContent.includes('annotated')",
                 timeout=60_000,
+                polling=100,
             )
             status = page.locator("#ann-status").text_content()
             assert "byte identity unavailable" in status, status
@@ -407,7 +413,9 @@ def test_form_feed_keeps_the_line_map(browser, tmp_path):
         try:
             page.add_init_script("window.__simdrefWasmBase = location.origin + '/wasm-v1/';")
             page.goto(f"http://127.0.0.1:{port}/")
-            page.wait_for_function("() => document.body.dataset.phase2 === 'done'", timeout=60_000)
+            page.wait_for_function(
+                "() => document.body.dataset.phase2 === 'done'", timeout=60_000, polling=100
+            )
             keys = page.evaluate(
                 """async () => {
                     const keys = [];
@@ -627,7 +635,9 @@ def test_multiline_string_warning_keeps_rows_f2(browser, tmp_path):
         try:
             page.add_init_script("window.__simdrefWasmBase = location.origin + '/wasm-v1/';")
             page.goto(f"http://127.0.0.1:{port}/")
-            page.wait_for_function("() => document.body.dataset.phase2 === 'done'", timeout=60_000)
+            page.wait_for_function(
+                "() => document.body.dataset.phase2 === 'done'", timeout=60_000, polling=100
+            )
             looked = page.evaluate(
                 """async (doc) => {
                     const seen = [];
@@ -731,14 +741,16 @@ def test_worker_death_before_ready_settles(browser, tmp_path):
                 ),
             )
             page.goto(f"http://127.0.0.1:{port}/")
-            page.wait_for_function("() => document.body.dataset.phase2 === 'done'", timeout=60_000)
+            page.wait_for_function(
+                "() => document.body.dataset.phase2 === 'done'", timeout=60_000, polling=100
+            )
             page.evaluate(
                 "() => { document.querySelector('#ann-input').value = 'addq %rax, %rbx';"
                 " document.querySelector('#ann-isa').value = 'x86';"
                 " window.__settled = false;"
                 " window.__run = runAnnotate().then(() => window.__settled = true); }"
             )
-            page.wait_for_function("() => window.__settled === true", timeout=90_000)
+            page.wait_for_function("() => window.__settled === true", timeout=90_000, polling=100)
             status = page.locator("#ann-status").text_content()
             assert "byte identity unavailable" in status, status
             assert "#" in page.locator("#ann-output").text_content()
@@ -774,7 +786,9 @@ def test_identity_upgrades_rows_in_background(browser, tmp_path):
         try:
             page.add_init_script("window.__simdrefWasmBase = location.origin + '/wasm-v1/';")
             page.goto(f"http://127.0.0.1:{port}/")
-            page.wait_for_function("() => document.body.dataset.phase2 === 'done'", timeout=60_000)
+            page.wait_for_function(
+                "() => document.body.dataset.phase2 === 'done'", timeout=60_000, polling=100
+            )
             # Show the annotate view without setTab (its hljs callback
             # would re-run Annotate once the input is set).
             page.evaluate("() => { document.body.dataset.tab = 'annotate'; }")
@@ -794,6 +808,7 @@ def test_identity_upgrades_rows_in_background(browser, tmp_path):
             page.wait_for_function(
                 "() => document.querySelector('#ann-output').textContent.trim().length > 0",
                 timeout=5_000,
+                polling=100,
             )
             first_seconds = time.monotonic() - t0
             assert first_seconds < 2, (
@@ -807,6 +822,7 @@ def test_identity_upgrades_rows_in_background(browser, tmp_path):
             page.wait_for_function(
                 "() => document.querySelector('#ann-status').textContent.includes('ready')",
                 timeout=30_000,
+                polling=100,
             )
             if SHOT_DIR:
                 page.screenshot(path=str(Path(SHOT_DIR) / "identity-ready.png"))
@@ -841,7 +857,9 @@ def test_warmup_shows_identity_preparing_before_annotate(browser, tmp_path):
         try:
             page.add_init_script("window.__simdrefWasmBase = location.origin + '/wasm-v1/';")
             page.goto(f"http://127.0.0.1:{port}/")
-            page.wait_for_function("() => document.body.dataset.phase2 === 'done'", timeout=60_000)
+            page.wait_for_function(
+                "() => document.body.dataset.phase2 === 'done'", timeout=60_000, polling=100
+            )
             # Show the annotate view without setTab (its hljs callback
             # would re-run Annotate once the input is set).
             page.evaluate("() => { document.body.dataset.tab = 'annotate'; }")
@@ -874,7 +892,9 @@ def test_wasm_fetch_failure_keeps_old_rows(browser, tmp_path):
         try:
             page.add_init_script("window.__simdrefWasmBase = location.origin + '/wasm-v1/';")
             page.goto(f"http://127.0.0.1:{port}/")
-            page.wait_for_function("() => document.body.dataset.phase2 === 'done'", timeout=60_000)
+            page.wait_for_function(
+                "() => document.body.dataset.phase2 === 'done'", timeout=60_000, polling=100
+            )
             page.evaluate(
                 "() => { document.querySelector('#ann-input').value = 'vaddps %ymm2, %ymm1, %ymm0';"
                 " document.querySelector('#ann-isa').value = 'x86';"
@@ -885,12 +905,13 @@ def test_wasm_fetch_failure_keeps_old_rows(browser, tmp_path):
             page.wait_for_function(
                 "() => document.querySelector('#ann-output').textContent.trim().length > 0",
                 timeout=5_000,
+                polling=100,
             )
             first_seconds = time.monotonic() - t0
             assert first_seconds < 2, (
                 f"first output took {first_seconds:.2f}s (identity failure blocked Annotate)"
             )
-            page.wait_for_function("() => window.__settled === true", timeout=30_000)
+            page.wait_for_function("() => window.__settled === true", timeout=30_000, polling=100)
             status = page.locator("#ann-status").text_content()
             assert "byte identity unavailable" in status, status
             assert "Add packed single-precision" in page.locator("#ann-output").text_content()
@@ -914,7 +935,9 @@ def test_edit_during_identity_drops_stale_rows(browser, tmp_path):
         try:
             page.add_init_script("window.__simdrefWasmBase = location.origin + '/wasm-v1/';")
             page.goto(f"http://127.0.0.1:{port}/")
-            page.wait_for_function("() => document.body.dataset.phase2 === 'done'", timeout=60_000)
+            page.wait_for_function(
+                "() => document.body.dataset.phase2 === 'done'", timeout=60_000, polling=100
+            )
             page.evaluate(
                 "(doc) => { document.querySelector('#ann-input').value = doc;"
                 " document.querySelector('#ann-isa').value = 'x86';"
@@ -924,6 +947,7 @@ def test_edit_during_identity_drops_stale_rows(browser, tmp_path):
             page.wait_for_function(
                 "() => document.querySelector('#ann-output').textContent.includes('vaddps')",
                 timeout=5_000,
+                polling=100,
             )
             page.evaluate(
                 """(doc) => {
@@ -937,10 +961,12 @@ def test_edit_during_identity_drops_stale_rows(browser, tmp_path):
                 "() => document.querySelector('#ann-output').textContent.includes('addps')"
                 " && !document.querySelector('#ann-output').textContent.includes('vaddps')",
                 timeout=4_000,
+                polling=100,
             )
             page.wait_for_function(
                 "() => document.querySelector('#ann-status').textContent.includes('ready')",
                 timeout=30_000,
+                polling=100,
             )
             out = page.locator("#ann-output").text_content()
             assert "addps" in out and "vaddps" not in out, out
@@ -964,7 +990,9 @@ def test_annotate_view_highlights_its_own_nav_pill(browser, tmp_path):
         try:
             page.add_init_script("window.__simdrefWasmBase = location.origin + '/wasm-v1/';")
             page.goto(f"http://127.0.0.1:{port}/")
-            page.wait_for_function("() => document.body.dataset.phase2 === 'done'", timeout=60_000)
+            page.wait_for_function(
+                "() => document.body.dataset.phase2 === 'done'", timeout=60_000, polling=100
+            )
             bg = "() => { const get = id => getComputedStyle(document.getElementById(id)).backgroundColor; return [get('tab-search'), get('tab-annotate')]; }"
             # The direct view flip the captures use: the pill follows it.
             page.evaluate("() => { document.body.dataset.tab = 'annotate'; }")
@@ -1016,7 +1044,9 @@ def test_clear_keeps_the_identity_status(browser, tmp_path):
 
             context.route("**/wasm-v1/*", hold)
             page.goto(f"http://127.0.0.1:{port}/")
-            page.wait_for_function("() => document.body.dataset.phase2 === 'done'", timeout=60_000)
+            page.wait_for_function(
+                "() => document.body.dataset.phase2 === 'done'", timeout=60_000, polling=100
+            )
             page.evaluate("() => { document.body.dataset.tab = 'annotate'; }")
             page.wait_for_function(
                 "() => document.querySelector('#ann-status').textContent.includes('preparing')",
@@ -1038,6 +1068,7 @@ def test_clear_keeps_the_identity_status(browser, tmp_path):
             page.wait_for_function(
                 "() => document.querySelector('#ann-status').textContent.includes('annotated')",
                 timeout=15_000,
+                polling=100,
             )
             page.locator("#ann-clear").click()
             status = page.locator("#ann-status").text_content()

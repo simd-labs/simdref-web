@@ -83,7 +83,9 @@ def annotate_page(browser, tmp_path):
         page = browser.new_page(viewport={"width": 1280, "height": 900})
         try:
             page.goto(f"http://127.0.0.1:{port}/")
-            page.wait_for_function("() => document.body.dataset.phase2 === 'done'", timeout=60_000)
+            page.wait_for_function(
+                "() => document.body.dataset.phase2 === 'done'", timeout=60_000, polling=100
+            )
             page.evaluate("() => { document.body.dataset.tab = 'annotate'; }")
             page.evaluate(
                 "(doc) => { document.querySelector('#ann-input').value = doc;"
@@ -93,10 +95,12 @@ def annotate_page(browser, tmp_path):
             page.wait_for_function(
                 "() => document.querySelector('#ann-status').textContent.includes('annotated')",
                 timeout=30_000,
+                polling=100,
             )
             page.wait_for_function(
                 "() => document.querySelector('#ann-status').textContent.includes('unavailable')",
                 timeout=60_000,
+                polling=100,
             )
             yield page
         finally:
@@ -106,7 +110,9 @@ def annotate_page(browser, tmp_path):
 def _hover_first_line(page):
     line = page.locator("#ann-output .ann-line").first
     line.hover()
-    page.wait_for_function("() => !document.querySelector('#ann-hover-pop').hidden", timeout=5_000)
+    page.wait_for_function(
+        "() => !document.querySelector('#ann-hover-pop').hidden", timeout=5_000, polling=100
+    )
     return line
 
 
@@ -194,7 +200,9 @@ def annotate_page_bottom(browser, tmp_path):
         page = browser.new_page(viewport={"width": 1280, "height": 800})
         try:
             page.goto(f"http://127.0.0.1:{port}/")
-            page.wait_for_function("() => document.body.dataset.phase2 === 'done'", timeout=60_000)
+            page.wait_for_function(
+                "() => document.body.dataset.phase2 === 'done'", timeout=60_000, polling=100
+            )
             page.evaluate("() => { document.body.dataset.tab = 'annotate'; }")
             page.evaluate(
                 "(doc) => { document.querySelector('#ann-input').value = doc;"
@@ -204,10 +212,12 @@ def annotate_page_bottom(browser, tmp_path):
             page.wait_for_function(
                 "() => document.querySelector('#ann-status').textContent.includes('annotated')",
                 timeout=30_000,
+                polling=100,
             )
             page.wait_for_function(
                 "() => document.querySelector('#ann-status').textContent.includes('unavailable')",
                 timeout=60_000,
+                polling=100,
             )
             yield page
         finally:
@@ -235,7 +245,9 @@ def test_hover_last_line_popover_stays_in_viewport(annotate_page_bottom):
     assert line_box["y"] + line_box["height"] > 800 - 50
 
     last.hover()
-    page.wait_for_function("() => !document.querySelector('#ann-hover-pop').hidden", timeout=5_000)
+    page.wait_for_function(
+        "() => !document.querySelector('#ann-hover-pop').hidden", timeout=5_000, polling=100
+    )
     page.wait_for_timeout(200)
     pop_box = page.evaluate(
         """() => {

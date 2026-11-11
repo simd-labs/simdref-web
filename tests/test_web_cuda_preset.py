@@ -24,7 +24,9 @@ def test_cuda_preset_selects_only_cuda_family(browser, page_url):
     page = browser.new_page()
     try:
         page.goto(page_url)
-        page.wait_for_function("() => document.body.dataset.phase2 === 'done'", timeout=60_000)
+        page.wait_for_function(
+            "() => document.body.dataset.phase2 === 'done'", timeout=60_000, polling=100
+        )
 
         _open_picker(page)
 

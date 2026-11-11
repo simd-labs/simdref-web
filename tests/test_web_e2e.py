@@ -47,7 +47,9 @@ def _wait_intrinsics_loaded(page) -> None:
     Phase 2 sets ``document.body.dataset.phase2 = "done"`` when every
     batch is in; wait on that.
     """
-    page.wait_for_function("() => document.body.dataset.phase2 === 'done'", timeout=60_000)
+    page.wait_for_function(
+        "() => document.body.dataset.phase2 === 'done'", timeout=60_000, polling=100
+    )
 
 
 def test_search_add_with_only_intrinsics_returns_intrinsics(browser, page_url):
@@ -123,6 +125,7 @@ def test_deep_link_to_intrinsic_resolves_after_phase2(browser, page_url):
             "() => document.querySelector('#detail') && "
             "document.querySelector('#detail').textContent.includes('_mm256_add_ps')",
             timeout=30_000,
+            polling=100,
         )
     finally:
         page.close()
@@ -145,7 +148,7 @@ def test_schema_version_mismatch_shows_error(browser, tmp_path_factory):
         page = browser.new_page()
         try:
             page.goto(f"http://127.0.0.1:{port}/")
-            page.wait_for_function("() => window.__loadError === true", timeout=15_000)
+            page.wait_for_function("() => window.__loadError === true", timeout=15_000, polling=100)
             assert "schema" in page.locator("#detail-empty").text_content().lower()
         finally:
             page.close()

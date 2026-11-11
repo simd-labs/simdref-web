@@ -129,7 +129,9 @@ def test_perf_tables_scroll_inside_own_box_below_1100px(browser, page_url) -> No
         try:
             page.goto(page_url)
             # Phase 2 repaints the page on completion; inject after it.
-            page.wait_for_function("() => document.body.dataset.phase2 === 'done'", timeout=60_000)
+            page.wait_for_function(
+                "() => document.body.dataset.phase2 === 'done'", timeout=60_000, polling=100
+            )
             page.evaluate(_RENDER_PERF_JS, _PERF_ROWS)
             m = page.evaluate(_BOX_JS)
             assert m["tables"], f"no perf tables rendered at {width}px"

@@ -48,7 +48,9 @@ def _titles(page) -> list[str]:
 
 def _boot(page, page_url) -> None:
     page.goto(page_url)
-    page.wait_for_function("() => document.body.dataset.phase2 === 'done'", timeout=60_000)
+    page.wait_for_function(
+        "() => document.body.dataset.phase2 === 'done'", timeout=60_000, polling=100
+    )
 
 
 def test_sm_50_hides_an_sm_70_row_and_sm_90_shows_it(browser, page_url, web_dir):
@@ -177,7 +179,9 @@ def test_hidden_rows_message_and_persistence(browser, page_url, web_dir):
         assert _titles(page) == []
 
         page.reload()
-        page.wait_for_function("() => document.body.dataset.phase2 === 'done'", timeout=60_000)
+        page.wait_for_function(
+            "() => document.body.dataset.phase2 === 'done'", timeout=60_000, polling=100
+        )
         _open_picker(page)
         picked = page.eval_on_selector("#sm-chips input[value='sm_50']", "el => el.checked")
         assert picked, "the sm_50 choice did not survive a reload"

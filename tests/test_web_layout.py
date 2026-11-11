@@ -43,9 +43,11 @@ _MOBILE_PAD_JS = """() => {
 def _search_vaddps(page, url):
     page.goto(url)
     # Phase 2 repaints the page and resets the list scroll; measure after it.
-    page.wait_for_function("() => document.body.dataset.phase2 === 'done'", timeout=60_000)
+    page.wait_for_function(
+        "() => document.body.dataset.phase2 === 'done'", timeout=60_000, polling=100
+    )
     page.locator("#query").fill("vaddps")
-    page.wait_for_function("document.querySelectorAll('#results .result').length > 0")
+    page.wait_for_function("document.querySelectorAll('#results .result').length > 0", polling=100)
     page.wait_for_timeout(200)
 
 
@@ -66,7 +68,9 @@ def test_results_and_detail_fit_the_window(browser, page_url, width, height):
         assert m["cardBottom"] <= m["innerH"] + 1, m
         assert m["scrollH"] == m["innerH"], m
         page.evaluate("document.querySelector('#results .result').click()")
-        page.wait_for_function("!!document.querySelector('#detail .detail-head')", timeout=15_000)
+        page.wait_for_function(
+            "!!document.querySelector('#detail .detail-head')", timeout=15_000, polling=100
+        )
         m = page.evaluate(_FIT_JS)
         assert m["detailBottom"] <= m["innerH"] + 1, m
         assert m["scrollH"] == m["innerH"], m
@@ -82,7 +86,9 @@ def test_results_fit_with_isa_panel_open(browser, page_url, width, height):
     try:
         _search_vaddps(page, page_url)
         page.evaluate("document.querySelector('#isa-toggle').click()")
-        page.wait_for_function("!document.querySelector('#isa-panel').classList.contains('hidden')")
+        page.wait_for_function(
+            "!document.querySelector('#isa-panel').classList.contains('hidden')", polling=100
+        )
         page.wait_for_timeout(200)
         # The panel shrinks the list, so its end moves; re-scroll to it.
         _scroll_results_to_end(page)
@@ -100,7 +106,9 @@ def test_annotate_view_fits_the_window(browser, page_url, width, height):
     page = browser.new_page(viewport={"width": width, "height": height})
     try:
         page.goto(page_url)
-        page.wait_for_function("() => document.body.dataset.phase2 === 'done'", timeout=60_000)
+        page.wait_for_function(
+            "() => document.body.dataset.phase2 === 'done'", timeout=60_000, polling=100
+        )
         page.evaluate("document.querySelector('#tab-annotate').click()")
         page.wait_for_timeout(200)
         m = page.evaluate(_ANN_JS)

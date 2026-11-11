@@ -66,7 +66,9 @@ def fixture_url(tmp_path_factory):
 
 def _open(page, url):
     page.goto(url)
-    page.wait_for_function("() => document.body.dataset.phase2 === 'done'", timeout=60_000)
+    page.wait_for_function(
+        "() => document.body.dataset.phase2 === 'done'", timeout=60_000, polling=100
+    )
 
 
 def _enable_families(page, families):
@@ -91,6 +93,7 @@ def _search(page, query, *keys):
             ".some(r => r.dataset.key === key)",
             arg=key,
             timeout=15_000,
+            polling=100,
         )
 
 
@@ -105,8 +108,11 @@ def _open_detail(page, query, key):
         "key => (document.querySelector('#detail h2')?.textContent || '').includes(key)",
         arg=key,
         timeout=15_000,
+        polling=100,
     )
-    page.wait_for_function("() => document.querySelector('#detail .kv-compact')", timeout=15_000)
+    page.wait_for_function(
+        "() => document.querySelector('#detail .kv-compact')", timeout=15_000, polling=100
+    )
 
 
 def _row_badges(page):

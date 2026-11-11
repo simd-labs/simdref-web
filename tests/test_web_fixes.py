@@ -68,7 +68,9 @@ def test_f1_count_updates_after_rows_render(browser, site):
     try:
         page.goto(url)
         page.locator("#query").fill("_mm_add_ps")
-        page.wait_for_function("document.querySelectorAll('#results .result').length > 0")
+        page.wait_for_function(
+            "document.querySelectorAll('#results .result').length > 0", polling=100
+        )
         page.wait_for_timeout(200)
         rows = page.evaluate("document.querySelectorAll('#results .result').length")
         count = page.text_content("#results-count") or ""
@@ -94,7 +96,8 @@ def test_f2_perf_line_inside_row_box(browser, site):
         page.goto(url)
         page.locator("#query").fill("_mm_add_ps")
         page.wait_for_function(
-            "document.querySelectorAll('#results .result .result-perf').length > 0"
+            "document.querySelectorAll('#results .result .result-perf').length > 0",
+            polling=100,
         )
         clipped = page.evaluate(
             """Array.from(document.querySelectorAll('#results .result')).map(row => {
@@ -140,13 +143,16 @@ def test_f3_no_horizontal_overflow_at_390(browser, site):
 
     try:
         page.goto(url)
-        page.wait_for_function("() => document.getElementById('query')")
+        page.wait_for_function("() => document.getElementById('query')", polling=100)
         page.wait_for_function(
-            "() => document.getElementById('results-count').textContent.length > 0"
+            "() => document.getElementById('results-count').textContent.length > 0",
+            polling=100,
         )
         assert_no_overflow("landing")
         page.locator("#query").fill("_mm_add_ps")
-        page.wait_for_function("document.querySelectorAll('#results .result').length > 0")
+        page.wait_for_function(
+            "document.querySelectorAll('#results .result').length > 0", polling=100
+        )
         assert_no_overflow("after search")
         page.evaluate("document.querySelector('#results .result').click()")
         page.wait_for_function(
@@ -154,6 +160,7 @@ def test_f3_no_horizontal_overflow_at_390(browser, site):
             " && !!document.querySelector('#detail .detail-head')"
             " && document.querySelector('#detail .detail-head').getBoundingClientRect().width > 0",
             timeout=15_000,
+            polling=100,
         )
         assert_no_overflow("detail open")
     finally:
@@ -184,7 +191,9 @@ def test_mobile_search_view_scrolls_with_touch(browser, site):
     try:
         page.goto(url)
         page.locator("#query").fill("add")
-        page.wait_for_function("document.querySelectorAll('#results .result').length > 0")
+        page.wait_for_function(
+            "document.querySelectorAll('#results .result').length > 0", polling=100
+        )
         page.evaluate(
             """() => {
                 const list = document.querySelector('#results');
@@ -225,10 +234,14 @@ def _goto_addps_detail(page, url):
     # '(xmm, xmm)' form; the plain 'addps' query ranks the (xmm, m128)
     # form first, which carries no linked intrinsics.
     page.locator("#query").fill("addps (xmm, xmm)")
-    page.wait_for_function("document.querySelectorAll('#results .result').length > 0")
+    page.wait_for_function("document.querySelectorAll('#results .result').length > 0", polling=100)
     page.evaluate("document.querySelector('#results .result').click()")
-    page.wait_for_function("() => document.querySelector('#detail .detail-head')", timeout=15_000)
-    page.wait_for_function("() => document.querySelector('#detail .detail-tabs')", timeout=15_000)
+    page.wait_for_function(
+        "() => document.querySelector('#detail .detail-head')", timeout=15_000, polling=100
+    )
+    page.wait_for_function(
+        "() => document.querySelector('#detail .detail-tabs')", timeout=15_000, polling=100
+    )
 
 
 def _settled(page):
@@ -237,10 +250,13 @@ def _settled(page):
     During ingest the app re-renders per batch and the tab bar blinks out
     and back; one-shot evaluates can land in the gap. The app sets
     document.body.dataset.phase2 once the last batch is folded in."""
-    page.wait_for_function("() => document.body.dataset.phase2 === 'done'", timeout=60_000)
+    page.wait_for_function(
+        "() => document.body.dataset.phase2 === 'done'", timeout=60_000, polling=100
+    )
     page.wait_for_function(
         "() => document.querySelectorAll('#detail .detail-tabs button').length === 4",
         timeout=60_000,
+        polling=100,
     )
 
 
@@ -261,6 +277,7 @@ def _tab(page, label):
             .find(b => /{label}/.test(b.textContent))
             ?.getAttribute('aria-pressed') === 'true'""",
         timeout=10_000,
+        polling=100,
     )
 
 
@@ -276,7 +293,9 @@ def test_missing_tabs_look_disabled(browser, site):
     try:
         page.goto(url)
         page.locator("#query").fill(subject)
-        page.wait_for_function("document.querySelectorAll('#results .result').length > 0")
+        page.wait_for_function(
+            "document.querySelectorAll('#results .result').length > 0", polling=100
+        )
         page.evaluate("document.querySelector('#results .result').click()")
         _settled(page)
         tabs = page.evaluate(
@@ -343,10 +362,14 @@ def test_default_tab_falls_back_when_no_perf(browser, site):
         # sources cover every NEG form now). It is not in the default search
         # pool, so navigate through the live hashchange handler, which
         # resolves the key through the catalog.
-        page.wait_for_function("() => document.body.dataset.phase2 === 'done'", timeout=60_000)
+        page.wait_for_function(
+            "() => document.body.dataset.phase2 === 'done'", timeout=60_000, polling=100
+        )
         page.evaluate("location.hash = '#x86%3Aaadd%20(m32%2C%20r32)'")
         page.wait_for_function(
-            "() => document.querySelector('#detail .detail-head')", timeout=20_000
+            "() => document.querySelector('#detail .detail-head')",
+            timeout=20_000,
+            polling=100,
         )
         _settled(page)
         # confirm this really is a no-perf entry
@@ -406,17 +429,23 @@ def test_summary_metadata_visible_on_every_detail_tab(browser, site, query, key,
     try:
         page.goto(url)
         page.locator("#query").fill(query)
-        page.wait_for_function("document.querySelectorAll('#results .result').length > 0")
+        page.wait_for_function(
+            "document.querySelectorAll('#results .result').length > 0", polling=100
+        )
         page.evaluate(
             "key => Array.from(document.querySelectorAll('#results .result'))"
             ".find(r => r.dataset.key === key)?.click()",
             key,
         )
         page.wait_for_function(
-            "() => document.querySelector('#detail .detail-head')", timeout=15_000
+            "() => document.querySelector('#detail .detail-head')",
+            timeout=15_000,
+            polling=100,
         )
         page.wait_for_function(
-            "() => document.querySelector('#detail .detail-tabs')", timeout=15_000
+            "() => document.querySelector('#detail .detail-tabs')",
+            timeout=15_000,
+            polling=100,
         )
         _settled(page)
         first = page.evaluate(state)
@@ -480,14 +509,19 @@ def test_perf_summary_obeys_source_filter(browser, site):
         # catalog, so navigate by key instead of searching. Navigate afresh:
         # a live query would keep the ADDPS detail from the steps above.
         page.goto(url)
-        page.wait_for_function("() => document.body.dataset.phase2 === 'done'", timeout=60_000)
+        page.wait_for_function(
+            "() => document.body.dataset.phase2 === 'done'", timeout=60_000, polling=100
+        )
         page.evaluate("location.hash = '#arm%3Aabs%20(z0.4s%2C%20p0%2Fm%2C%20z1.4s)'")
         page.wait_for_function(
             "() => document.querySelector('#detail .detail-head h2')?.textContent.includes('ABS')",
             timeout=15_000,
+            polling=100,
         )
         page.wait_for_function(
-            "() => !!document.querySelector('#detail .perf-line')", timeout=15_000
+            "() => !!document.querySelector('#detail .perf-line')",
+            timeout=15_000,
+            polling=100,
         )
         modeled = page.evaluate("document.querySelector('#detail .perf-line')?.innerText || ''")
         assert "Latency" in modeled, modeled
@@ -533,6 +567,7 @@ def test_perf_goto_switches_tab_then_scrolls(browser, site):
             "Array.from(document.querySelectorAll('#detail .detail-tabs button'))"
             ".find(b => /Perf/.test(b.textContent))?.getAttribute('aria-pressed') === 'true'",
             timeout=10_000,
+            polling=100,
         )
         assert (
             page.evaluate(
@@ -634,6 +669,7 @@ def test_deeplink_exact_key_opens_entry_not_no_results(browser, site, key, expec
             "() => document.body.dataset.phase2 === 'done'"
             " && !!document.querySelector('#detail .detail-head')",
             timeout=120_000,
+            polling=100,
         )
         # Phase 2's done marker can beat the deferred deep-link render by a
         # microtask; wait for the head to name this entry.
@@ -642,6 +678,7 @@ def test_deeplink_exact_key_opens_entry_not_no_results(browser, site, key, expec
             ".toUpperCase().includes(want)",
             arg=expected.upper(),
             timeout=120_000,
+            polling=100,
         )
         head = page.evaluate(
             "() => (document.querySelector('#detail .detail-head')?.innerText || '').toUpperCase()"
