@@ -29,7 +29,8 @@ jobs:
         run: pip install pytest playwright
 
       - name: Install Playwright's Chromium
-        run: python -m playwright install --with-deps chromium
+        # The runner image already has the Chrome libraries; apt is only a fallback when its mirror is down.
+        run: python -m playwright install --with-deps chromium || python -m playwright install chromium
 
       - name: No simdref import (this repo ships static files only)
         run: |

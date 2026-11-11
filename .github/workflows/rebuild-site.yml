@@ -78,7 +78,8 @@ jobs:
         # broken site.
         run: |
           pip install pytest playwright
-          playwright install --with-deps chromium
+          # The runner image already has the Chrome libraries; apt is only a fallback when its mirror is down.
+          python -m playwright install --with-deps chromium || python -m playwright install chromium
           SIMDREF_WEB_SITE_DATA="$PWD/_site" python -m pytest tests/test_web_e2e.py -q
 
       - uses: actions/upload-pages-artifact@v5
