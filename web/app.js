@@ -188,6 +188,13 @@ function defaultSubsForFamily(family) {
   return new Set(order.filter(sub => defaults.has(sub)));
 }
 
+/* Every family the UI can name: the chip list plus the families the
+   export holds. A chip_families entry stays listed with no rows (TUI
+   parity). */
+function listedIsas() {
+  return chipFamilies ? [...new Set([...chipFamilies, ...availableIsas])] : [...availableIsas];
+}
+
 function initEnabledSubIsas() {
   enabledSubIsas = new Map();
   for (const family of availableIsas) {
@@ -198,7 +205,7 @@ function initEnabledSubIsas() {
 function ensureManualIsaState() {
   if (!enableAllIsas) return;
   enableAllIsas = false;
-  enabledIsas = new Set(availableIsas);
+  enabledIsas = new Set(listedIsas());
   for (const family of availableIsas) {
     if (FAMILY_SUB_ORDER[family]) enabledSubIsas.set(family, new Set(FAMILY_SUB_ORDER[family]));
   }
@@ -785,7 +792,8 @@ function renderMeasurements(measurements) {
     let inner = "";
     let gi = 0;
     for (const [family, frows] of groups) {
-      inner += `<details class="meas-group" ${gi++ === 0 && kind === splits[0][0] ? "open" : ""}><summary>${esc(family)} (${frows.length})</summary><div class="perf-scroll">${renderTable(measHeaders, frows)}</div></details>`;
+      const firstGroup = gi++ === 0 && kind === splits[0][0];
+      inner += `<details class="meas-group" ${allExpanded || firstGroup ? "open" : ""}><summary>${esc(family)} (${frows.length})</summary><div class="perf-scroll">${renderTable(measHeaders, frows)}</div></details>`;
     }
     /* Provenance footnote: one "name version citation" line per distinct
        source in the panel. Rows without the fields add no line. */
@@ -812,6 +820,14 @@ function renderMeasurements(measurements) {
 /* ── Description sections ────────────────────────────────────────── */
 const codeSections = new Set(["Operation", "Intrinsic Equivalents"]);
 
+/* TUI toggle_all parity: the flag survives entry switches, and new
+   renders open or close their sections to match it. */
+let allExpanded = false;
+function toggleAllSections() {
+  allExpanded = !allExpanded;
+  for (const d of detailNode.querySelectorAll("details")) d.open = allExpanded;
+}
+
 /* The record's own key order is the render order: simdref writes the
    sections in doc page order, so no sort and no hand order here. */
 function renderDescriptionSections(description) {
@@ -819,7 +835,7 @@ function renderDescriptionSections(description) {
   let html = "";
   for (const [key, value] of Object.entries(description)) {
     const isCode = codeSections.has(key);
-    html += `<details class="desc-section">
+    html += `<details class="desc-section"${allExpanded ? " open" : ""}>
         <summary>${esc(key)}</summary>
         ${isCode ? `<pre class="desc-code">${esc(value)}</pre>` : `<div class="desc-body">${esc(value)}</div>`}
       </details>`;
@@ -902,7 +918,7 @@ function _c3apply() {
     t = C3_TABS.map(([, l]) => l).find(l => [...kinds.values()].includes(l)) || "";
   }
   for (const [sec, k] of kinds) sec.classList.toggle("detail-hidden", k !== t);
-  for (const b of detail.querySelectorAll(".detail-tabs button")) {
+  for (const b of detail.querySelectorAll(".detail-tabs button:not(.detail-all)")) {
     const label = b.textContent.replace(/^\d /, "");
     const has = [...kinds.values()].includes(label);
     b.disabled = !has;
@@ -928,8 +944,19 @@ function _c3bar() {
       b.onclick = () => _c3pick(label);
       bar.append(b);
     }
+    const all = document.createElement("button");
+    all.type = "button";
+    all.className = "detail-all";
+    all.textContent = "Expand/Collapse All";
+    all.title = "Expand or collapse every detail section (f)";
+    all.onclick = () => toggleAllSections();
+    // The control sits beside the tab bar, never inside it: the tab-bar
+    // buttons carry the tab look and the tab styling checks read them all.
+    const wrap = document.createElement("div");
+    wrap.className = "detail-tabs-wrap";
+    wrap.append(bar, all);
     const anchor = detail.querySelector(".detail-keep") || detail.querySelector(".detail-head");
-    if (anchor) anchor.after(bar); else detail.prepend(bar);
+    if (anchor) anchor.after(wrap); else detail.prepend(wrap);
     _c3apply();
   }, 0);
 }
@@ -1240,7 +1267,7 @@ function updateIsaSummary() {
   // Chip families first in family order, then preset-only families by
   // name, so the CUDA preset reads "CUDA, PTX" (TUI parity).
   const chipSet = chipFamilies ? new Set(chipFamilies) : null;
-  const chips = availableIsas.filter(v => enabledIsas.has(v) && (!chipSet || chipSet.has(v)));
+  const chips = listedIsas().filter(v => enabledIsas.has(v) && (!chipSet || chipSet.has(v)));
   const presetOnly = chipSet ? [...enabledIsas].filter(v => !chipSet.has(v)).sort() : [];
   const active = [...chips, ...presetOnly];
   if (!active.length) { isaSummary.textContent = "ISA: None"; return; }
@@ -1250,8 +1277,10 @@ function updateIsaSummary() {
 
 function renderIsaFilters() {
   // chip_families names the chips in order; without the key every
-  // available family is a chip, like before the key existed.
-  const chipList = chipFamilies ? chipFamilies.filter(f => availableIsas.includes(f)) : availableIsas;
+  // available family is a chip, like before the key existed. A listed
+  // family stays a chip even when the export has no rows for it (TUI
+  // parity).
+  const chipList = chipFamilies ? [...chipFamilies] : availableIsas;
   isaFamiliesNode.innerHTML = chipList.map(family => {
     const familyActive = enableAllIsas || enabledIsas.has(family);
     return `<label class="isa-chip ${familyActive ? "active" : ""}">
@@ -1335,26 +1364,22 @@ function smChipVisible() {
   });
 }
 
+/* One chip cycles off -> each catalog floor -> off, labelled like the
+   TUI SmChip ("SM: off", "SM: sm_50"). */
 function renderSmChips() {
   const group = $("sm-group");
   const wrap = $("sm-chips");
   if (!group || !wrap) return;
   group.hidden = !smChipVisible();
-  wrap.innerHTML = ["", ...smLevels].map((level) => {
-    const picked = activeSm === (level || null);
-    return `<label class="isa-chip ${picked ? "active" : ""}">
-      <input type="radio" name="sm-level" value="${esc(level)}" ${picked ? "checked" : ""}>
-      ${level ? esc(level) : "any"}
-    </label>`;
-  }).join("");
-  for (const cb of wrap.querySelectorAll("input[name=sm-level]")) {
-    cb.addEventListener("change", () => {
-      activeSm = cb.value || null;
-      persistSm();
-      visibleSet = null;
-      scheduleFilterRender();
-    });
-  }
+  wrap.innerHTML = `<button type="button" id="sm-chip" class="isa-chip ${activeSm ? "active" : ""}" title="Hide CUDA/PTX rows whose SM floor is above the chosen level">SM: ${esc(activeSm || "off")}</button>`;
+  wrap.querySelector("#sm-chip").addEventListener("click", () => {
+    const step = activeSm && smLevels.includes(activeSm) ? smLevels.indexOf(activeSm) + 1 : 0;
+    activeSm = step < smLevels.length ? smLevels[step] : null;
+    persistSm();
+    renderSmChips();
+    visibleSet = null;
+    scheduleFilterRender();
+  });
 }
 
 /* The applied preset marks its button (TUI parity); a hand change to a
@@ -1375,11 +1400,11 @@ function applyIsaPreset(mode) {
 
   if (mode === "all") {
     enableAllIsas = true;
-    enabledIsas = new Set(availableIsas);
+    enabledIsas = new Set(listedIsas());
     initEnabledSubIsas();
   } else {
     enableAllIsas = false;
-    enabledIsas = new Set((preset.families || []).filter(v => availableIsas.includes(v)));
+    enabledIsas = new Set((preset.families || []).filter(v => listedIsas().includes(v)));
     // Apply preset subs per family (intersect with FAMILY_SUB_ORDER).
     enabledSubIsas = new Map();
     const presetSubs = new Set(preset.subs || []);
@@ -1625,6 +1650,15 @@ document.addEventListener("keydown", (e) => {
     return;
   }
 
+  // Ctrl+left/right: nudge the annotate split (TUI ann_split keys)
+  if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
+    if (document.body.dataset.tab === "annotate") {
+      e.preventDefault();
+      nudgeSplit(e.key === "ArrowLeft" ? -0.05 : 0.05);
+      return;
+    }
+  }
+
   // /: focus search (when not in input)
   if (e.key === "/" && !inInput) {
     e.preventDefault();
@@ -1636,6 +1670,35 @@ document.addEventListener("keydown", (e) => {
   // In search input: arrow keys navigate results directly
   if (inInput && document.activeElement === queryInput) {
     return;
+  }
+
+  // Keys the TUI binds globally (f, i, 1-9) win over type-to-refine, so
+  // they act the same whether or not a result row holds focus.
+  if (!inInput && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    if (e.key === "f") {
+      e.preventDefault();
+      toggleAllSections();
+      return;
+    }
+    if (e.key === "i") {
+      e.preventDefault();
+      isaPanel.classList.toggle("hidden");
+      return;
+    }
+    // 1-9 pick a result by row number (TUI pick). 1-4 stay the detail
+    // quick-tab keys while the detail pane holds focus.
+    if (e.key >= "1" && e.key <= "9" && e.key.length === 1) {
+      const inDetail = detailNode.contains(document.activeElement);
+      if (!(inDetail && e.key <= "4")) {
+        e.preventDefault();
+        const idx = Number(e.key) - 1;
+        if (idx < resultPool.length) {
+          focusResult(idx);
+          selectFocused();
+        }
+        return;
+      }
+    }
   }
 
   if (
@@ -1651,9 +1714,6 @@ document.addEventListener("keydown", (e) => {
 
   // d: toggle dark mode
   if (e.key === "d") { toggleTheme(); return; }
-
-  // f: toggle ISA filter
-  if (e.key === "f") { isaPanel.classList.toggle("hidden"); return; }
 
   if (e.shiftKey && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
     e.preventDefault();
@@ -2901,6 +2961,18 @@ function applySplit(ratio) {
   if (!panes) return;
   panes.style.setProperty("--ann-split",   `${r}fr`);
   panes.style.setProperty("--ann-split-r", `${1 - r}fr`);
+}
+/* Ctrl+left/right step the ratio by 5%, like the TUI's ann_split keys,
+   and store the new ratio like the drag end does. */
+function nudgeSplit(delta) {
+  const panes = $("ann-panes");
+  if (!panes) return;
+  const cur = parseFloat(panes.style.getPropertyValue("--ann-split")) || 1 / 3;
+  applySplit(cur + delta);
+  const r = parseFloat(panes.style.getPropertyValue("--ann-split").trim());
+  if (isFinite(r)) {
+    try { localStorage.setItem(ANN_SPLIT_KEY, String(r)); } catch (_) { /* ignore */ }
+  }
 }
 function restoreSplit() {
   let r = 1 / 3;  // default: left 1/3, right 2/3

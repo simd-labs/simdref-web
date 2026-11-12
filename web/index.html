@@ -37,7 +37,7 @@
       <input id="query" type="text" role="searchbox" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" aria-autocomplete="none" data-lpignore="true" data-form-type="other" data-1p-ignore="true" name="simdref-query" placeholder="Search intrinsics or instructions...">
       <kbd class="search-hint">/</kbd>
     </div>
-    <button id="isa-toggle" class="isa-toggle-btn" type="button" title="ISA filters (f)">
+    <button id="isa-toggle" class="isa-toggle-btn" type="button" title="ISA filters (i)">
       <span id="isa-summary">ISA: Default</span>
       <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 5l3 3 3-3"/></svg>
     </button>
@@ -60,7 +60,6 @@
     <div id="isa-subgroups" class="isa-groups"></div>
     <div class="isa-groups">
       <div id="sm-group" class="isa-group" hidden>
-        <span class="isa-group-label" title="Hide CUDA/PTX rows whose SM floor is above the chosen level">SM</span>
         <div class="isa-group-items" id="sm-chips"></div>
       </div>
     </div>
@@ -148,8 +147,10 @@
         <tr><td><kbd>Tab</kbd></td><td>Focus detail panel</td></tr>
         <tr><td><kbd>Shift+Tab</kbd></td><td>Focus results panel</td></tr>
         <tr><td><kbd>c</kbd></td><td>Copy name to clipboard</td></tr>
+        <tr><td><kbd>1</kbd>-<kbd>9</kbd></td><td>Pick result</td></tr>
         <tr><td><kbd>s</kbd></td><td>Toggle sidebar</td></tr>
-        <tr><td><kbd>f</kbd></td><td>Toggle ISA filter</td></tr>
+        <tr><td><kbd>f</kbd></td><td>Expand/Collapse All</td></tr>
+        <tr><td><kbd>i</kbd></td><td>Toggle ISA filter</td></tr>
         <tr><td><kbd>d</kbd></td><td>Toggle dark mode</td></tr>
         <tr><td><kbd>?</kbd></td><td>Show shortcuts</td></tr>
       </table>
