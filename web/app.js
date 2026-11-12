@@ -828,12 +828,20 @@ function toggleAllSections() {
   for (const d of detailNode.querySelectorAll("details")) d.open = allExpanded;
 }
 
-/* The record's own key order is the render order: simdref writes the
-   sections in doc page order, so no sort and no hand order here. */
+/* The sections arrive as ordered [heading, text] pairs: simdref sorts
+   JSON keys for deterministic bytes, so a plain object there would lose
+   the doc page order. Older exports carry the object shape, and its key
+   order is the render order there. */
+function sectionEntries(description) {
+  if (!description) return [];
+  return Array.isArray(description) ? description : Object.entries(description);
+}
+
 function renderDescriptionSections(description) {
-  if (!description || !Object.keys(description).length) return "";
+  const entries = sectionEntries(description);
+  if (!entries.length) return "";
   let html = "";
-  for (const [key, value] of Object.entries(description)) {
+  for (const [key, value] of entries) {
     const isCode = codeSections.has(key);
     html += `<details class="desc-section"${allExpanded ? " open" : ""}>
         <summary>${esc(key)}</summary>
@@ -1048,11 +1056,11 @@ function renderIntrinsicDetail(item, detail) {
         linked
       ) : `<div style="color:var(--text-muted);font-size:0.82rem">No linked instructions.</div>`}
     </section>
-    ${detail && detail.doc_sections && Object.keys(detail.doc_sections).length ? `<section class="section">
+    ${detail && sectionEntries(detail.doc_sections).length ? `<section class="section">
       <h3>${esc(docSectionTitle(detail))}</h3>
       ${renderDescriptionSections(detail.doc_sections)}
     </section>` : ""}
-    ${detail && detail._instrDescription && Object.keys(detail._instrDescription).length ? `<section class="section">
+    ${detail && sectionEntries(detail._instrDescription).length ? `<section class="section">
       <h3>Instruction Semantics</h3>
       ${renderDescriptionSections(detail._instrDescription)}
     </section>` : ""}
@@ -1167,7 +1175,7 @@ function renderInstructionDetail(item, detail) {
         linked
       ) : `<div style="color:var(--text-muted);font-size:0.82rem">No linked intrinsics.</div>`}
     </section>
-    ${d.description && Object.keys(d.description).length ? `<section class="section">
+    ${sectionEntries(d.description).length ? `<section class="section">
       <h3>Instruction Semantics</h3>
       ${renderDescriptionSections(d.description)}
     </section>` : ""}

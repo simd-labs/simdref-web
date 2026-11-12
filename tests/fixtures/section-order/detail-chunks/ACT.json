@@ -1,0 +1,33 @@
+{
+  "ptx:activemask.b32": {
+    "architecture": "ptx",
+    "description": [
+      ["Syntax", "activemask.b32  d;"],
+      ["Description", "Returns a 32-bit mask of the currently active threads in the warp."],
+      ["PTX ISA Notes", "Introduced in PTX ISA 6.0."],
+      ["Target ISA Notes", "Requires sm_70 or higher."],
+      ["Examples", "// _shfl_sync equivalent using activemask\nmov.u32  d, activemask.b32;"]
+    ],
+    "display_architecture": "ptx",
+    "display_form": "activemask.b32",
+    "display_isa": "PTX",
+    "display_mnemonic": "activemask.b32",
+    "form": "activemask.b32",
+    "isa": [
+      "PTX"
+    ],
+    "linked_intrinsics": [
+      "__activemask"
+    ],
+    "measurements": [],
+    "metadata": {
+      "ptx_isa": "6.0",
+      "sm": "sm_70",
+      "url": "https://docs.nvidia.com/cuda/parallel-thread-execution/index.html#activemask"
+    },
+    "mnemonic": "activemask.b32",
+    "operand_details": [],
+    "pdf_refs": [],
+    "summary": "activemask.b32 instruction in Warp Shuffle and Vote Instructions."
+  }
+}
