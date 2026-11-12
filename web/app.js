@@ -967,10 +967,12 @@ function renderIntrinsicDetail(item, detail) {
       </div>
       <div class="kv-links">
         ${instrPdfRefs.map(ref => `<a class="kv-link" href="${esc(ref.url || "")}" target="_blank" rel="noreferrer">${esc(ref.label || ref.source_id || "PDF")}${ref.page_start ? ` p${esc(ref.page_start)}` : ""}</a>`).join("")}
-        ${detail && detail.url ? kvLink("Source", detail.url) : ""}
-        ${meta.reference_url ? kvLink("Reference", meta.reference_url) : ""}
-        ${instrMeta.url ? kvLink(linkLabel(instrMeta.url), canonUrl(instrMeta.url)) : ""}
-        ${instrMeta["url-ref"] ? kvLink("Instr Ref", canonUrl(instrMeta["url-ref"])) : ""}
+        ${kvLinks([
+          ["Source", detail && detail.url],
+          ["Reference", meta.reference_url],
+          [instrMeta.url ? linkLabel(instrMeta.url) : "", instrMeta.url],
+          ["Instr Ref", instrMeta["url-ref"]],
+        ])}
       </div>
       ${perfSummary(detail && detail._measurements)}
     </div>
@@ -1037,11 +1039,28 @@ function kvChip(label, value) {
 function kvLink(label, href) {
   return `<a class="kv-link" href="${esc(href)}" target="_blank" rel="noreferrer">${esc(label)}</a>`;
 }
-/* The link names its host class: uops.info rows keep the site name,
-   any other reference reads "Reference". */
+/* Header links show one link per URL: two slots with the same URL render
+   once, the first label wins. */
+function kvLinks(entries) {
+  const seen = new Set();
+  let out = "";
+  for (const [label, url] of entries) {
+    const href = canonUrl(url);
+    if (!href || seen.has(href)) continue;
+    seen.add(href);
+    out += kvLink(label, href);
+  }
+  return out;
+}
+/* The link names its host class: uops.info rows keep the site name, a
+   PTX reference doc link reads "PTX reference", any other reference
+   reads "Reference". */
 function linkLabel(url) {
   try {
-    return new URL(url).hostname.endsWith("uops.info") ? "uops.info" : "Reference";
+    const u = new URL(url);
+    if (u.hostname.endsWith("uops.info")) return "uops.info";
+    if (u.hostname === "docs.nvidia.com" && u.pathname.split("parallel-thread-execution").length > 1) return "PTX reference";
+    return "Reference";
   } catch (_) {
     return "Reference";
   }
@@ -1075,8 +1094,10 @@ function renderInstructionDetail(item, detail) {
       </div>
       <div class="kv-links">
         ${pdfRefs.map(ref => `<a class="kv-link" href="${esc(ref.url || "")}" target="_blank" rel="noreferrer">${esc(ref.label || ref.source_id || "PDF")}${ref.page_start ? ` p${esc(ref.page_start)}` : ""}</a>`).join("")}
-        ${meta.url ? kvLink(linkLabel(meta.url), canonUrl(meta.url)) : ""}
-        ${meta["url-ref"] ? kvLink("Reference", canonUrl(meta["url-ref"])) : ""}
+        ${kvLinks([
+          [meta.url ? linkLabel(meta.url) : "", meta.url],
+          ["Reference", meta["url-ref"]],
+        ])}
       </div>
       ${perfSummary(measurements)}
     </div>
@@ -1259,6 +1280,7 @@ function renderIsaFilters() {
     cb.addEventListener("change", () => {
       const family = cb.dataset.family;
       ensureManualIsaState();
+      activePreset = null;
       if (cb.checked) enabledIsas.add(family); else enabledIsas.delete(family);
       visibleSet = null;
       scheduleFilterRender();
@@ -1269,6 +1291,7 @@ function renderIsaFilters() {
     btn.addEventListener("click", () => {
       const family = btn.dataset.groupFamily;
       ensureManualIsaState();
+      activePreset = null;
       const familyActive = enabledIsas.has(family);
       if (familyActive) {
         enabledIsas.delete(family);
@@ -1287,6 +1310,7 @@ function renderIsaFilters() {
       const family = cb.dataset.family;
       const subIsa = cb.dataset.subIsa;
       ensureManualIsaState();
+      activePreset = null;
       enabledIsas.add(family);
       const familySubs = new Set(enabledSubIsas.get(family) || []);
       if (cb.checked) familySubs.add(subIsa); else familySubs.delete(subIsa);
@@ -1333,9 +1357,21 @@ function renderSmChips() {
   }
 }
 
+/* The applied preset marks its button (TUI parity); a hand change to a
+   family, sub-ISA or kind chip drops the mark. */
+let activePreset = null;
+function updatePresetButtons() {
+  for (const btn of document.querySelectorAll(".isa-presets .preset-btn")) {
+    const on = btn.id === "isa-" + activePreset;
+    btn.classList.toggle("active", on);
+    btn.setAttribute("aria-pressed", on ? "true" : "false");
+  }
+}
+
 function applyIsaPreset(mode) {
   const preset = ARCH_PRESETS[mode];
   if (!preset) return;
+  activePreset = mode;
 
   if (mode === "all") {
     enableAllIsas = true;
@@ -1381,6 +1417,7 @@ function scheduleFilterRender() {
     rebuildVisibleSet();
     if (typeof updateIsaSummary === "function") updateIsaSummary();
     renderIsaFilters();
+    updatePresetButtons();
     renderResults();
   });
 }
@@ -1754,6 +1791,7 @@ $("isa-all").addEventListener("click", () => _pickPreset("all"));
 for (const cb of document.querySelectorAll('#kind-bar input[data-kind]')) {
   cb.addEventListener("change", () => {
     const kind = cb.dataset.kind;
+    activePreset = null;
     if (cb.checked) enabledKinds.add(kind); else enabledKinds.delete(kind);
     cb.parentElement.classList.toggle("active", cb.checked);
     visibleSet = null;

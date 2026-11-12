@@ -3,9 +3,11 @@
 FilterSpec.chip_families names the family chips; CUDA and PTX stay out
 of the chip row and are reachable only through presets. The CUDA
 preset selects CUDA and PTX and keeps both result kinds, the Default
-preset enables no Arm or RISC-V family, an instruction metadata link is
-labelled "uops.info" only on that host, and the description sections
-render in the record's own key order.
+preset enables no Arm or RISC-V family, the applied preset marks its
+button and a hand chip change drops the mark, an instruction metadata
+link is labelled "uops.info" only on that host and "PTX reference" on
+the PTX doc host, one URL renders one header link, and the description
+sections render in the record's own key order.
 
 Skips when Playwright or its chromium browser are missing. The shared
 server and browser fixtures live in conftest.py.
@@ -81,6 +83,22 @@ def no_cuda_preset_url(tmp_path_factory):
         yield f"http://127.0.0.1:{port}/"
 
 
+@pytest.fixture(scope="module")
+def shared_ref_url(tmp_path_factory):
+    """Fixture site where the intrinsic's reference_url equals the URL of
+    its linked instruction row."""
+    out = _make_site(tmp_path_factory, "web-presets-shared-ref")
+    chunk = out / "intrinsic-chunks" / "act.json"
+    data = json.loads(chunk.read_text())
+    data["__activemask"]["metadata"]["reference_url"] = (
+        "https://docs.nvidia.com/cuda/parallel-thread-execution/index.html#activemask"
+    )
+    chunk.write_text(json.dumps(data) + "\n")
+    port = _free_port()
+    with _serve(out, port):
+        yield f"http://127.0.0.1:{port}/"
+
+
 def _open(page, url):
     page.goto(url)
     page.wait_for_function(
@@ -117,6 +135,37 @@ def _search(page, query):
         polling=100,
     )
     page.wait_for_timeout(200)
+
+
+def _links(page, url, hash_key, heading):
+    page.goto(url + "#" + hash_key)
+    page.wait_for_function(
+        "t => (document.querySelector('#detail h2')?.textContent || '').includes(t)",
+        arg=heading,
+        timeout=15_000,
+        polling=100,
+    )
+    page.wait_for_function(
+        "() => document.querySelectorAll('#detail .kv-links .kv-link').length > 0",
+        timeout=15_000,
+        polling=100,
+    )
+    return page.eval_on_selector_all(
+        "#detail .kv-links .kv-link",
+        "els => els.map(e => [e.textContent.trim(), e.getAttribute('href')])",
+    )
+
+
+def _preset_marks(page):
+    return page.eval_on_selector_all(
+        ".isa-presets .preset-btn",
+        "els => els.map(e => [e.id, e.classList.contains('active'),"
+        " e.getAttribute('aria-pressed')])",
+    )
+
+
+def _marked(page):
+    return [i for i, on, _ in _preset_marks(page) if on]
 
 
 def test_family_chips_hide_the_preset_only_families(browser, fixture_url):
@@ -216,45 +265,32 @@ def test_default_preset_enables_no_arm_or_riscv(browser, fixture_url):
 
 
 def test_instruction_metadata_link_labels(browser, fixture_url):
-    """The metadata link reads 'uops.info' only on that host; any other
-    reference URL reads 'Reference'."""
+    """The metadata link reads 'uops.info' only on that host and 'PTX
+    reference' on the PTX doc host; any other reference URL reads
+    'Reference'."""
     page = browser.new_page(viewport={"width": 1440, "height": 900})
     try:
         _open(page, fixture_url)
 
-        def links(hash_key, heading):
-            page.goto(fixture_url + "#" + hash_key)
-            page.wait_for_function(
-                "t => (document.querySelector('#detail h2')?.textContent || '').includes(t)",
-                arg=heading,
-                timeout=15_000,
-                polling=100,
-            )
-            page.wait_for_function(
-                "() => document.querySelectorAll('#detail .kv-links .kv-link').length > 0",
-                timeout=15_000,
-                polling=100,
-            )
-            return page.eval_on_selector_all(
-                "#detail .kv-links .kv-link",
-                "els => els.map(e => [e.textContent.trim(), e.getAttribute('href')])",
-            )
-
         # The CUDA intrinsic's linked instruction sits on docs.nvidia.com.
-        cuda = links("__activemask", "__activemask")
+        cuda = _links(page, fixture_url, "__activemask", "__activemask")
         assert any(
-            t == "Reference" and "parallel-thread-execution" in (h or "") for t, h in cuda
+            t == "PTX reference" and "parallel-thread-execution" in (h or "") for t, h in cuda
         ), cuda
 
-        # The PTX instruction's own URL also reads "Reference".
-        ptx = links("ptx%3Aactivemask.b32", "activemask.b32")
-        assert any(t == "Reference" for t, _ in ptx), ptx
+        # The PTX instruction's own URL also reads "PTX reference".
+        ptx = _links(page, fixture_url, "ptx%3Aactivemask.b32", "activemask.b32")
+        assert any(
+            t == "PTX reference" and "parallel-thread-execution" in (h or "") for t, h in ptx
+        ), ptx
         assert not any(t == "uops.info" for t, _ in ptx), ptx
 
         # A uops.info row keeps the site name, at both link sites.
-        vaddps = links("x86%3Avaddps%20(ymm%2C%20ymm%2C%20ymm)", "VADDPS (YMM, YMM, YMM)")
+        vaddps = _links(
+            page, fixture_url, "x86%3Avaddps%20(ymm%2C%20ymm%2C%20ymm)", "VADDPS (YMM, YMM, YMM)"
+        )
         assert any(t == "uops.info" and "uops.info" in (h or "") for t, h in vaddps), vaddps
-        mm = links("_mm256_add_ps", "_mm256_add_ps")
+        mm = _links(page, fixture_url, "_mm256_add_ps", "_mm256_add_ps")
         assert any(t == "uops.info" and "uops.info" in (h or "") for t, h in mm), mm
     finally:
         page.close()
@@ -288,5 +324,85 @@ def test_description_sections_keep_the_record_key_order(browser, fixture_url):
             "PTX ISA Notes",
             "Target ISA Notes",
         ], heads
+    finally:
+        page.close()
+
+
+def test_preset_click_marks_the_active_preset_button(browser, fixture_url):
+    """A preset click marks its button with 'active' and aria-pressed=true,
+    and a reload restores the mark from the stored preset."""
+    page = browser.new_page(viewport={"width": 1440, "height": 900})
+    try:
+        _open(page, fixture_url)
+        _open_picker(page)
+        page.locator("#isa-cuda").click()
+        page.wait_for_timeout(300)
+        marks = {i: (on, pressed) for i, on, pressed in _preset_marks(page)}
+        assert marks["isa-cuda"] == (True, "true"), marks
+        assert _marked(page) == ["isa-cuda"], marks
+
+        page.reload()
+        page.wait_for_function(
+            "() => document.body.dataset.phase2 === 'done'", timeout=60_000, polling=100
+        )
+        marks = {i: (on, pressed) for i, on, pressed in _preset_marks(page)}
+        assert marks["isa-cuda"] == (True, "true"), marks
+    finally:
+        page.close()
+
+
+def test_hand_chip_change_clears_the_active_preset_mark(browser, fixture_url):
+    """A hand change to a family or kind chip drops the preset mark."""
+    page = browser.new_page(viewport={"width": 1440, "height": 900})
+    try:
+        _open(page, fixture_url)
+        _open_picker(page)
+
+        # Family chip.
+        page.locator("#isa-cuda").click()
+        page.wait_for_timeout(300)
+        assert _marked(page) == ["isa-cuda"], _preset_marks(page)
+        cb = page.locator('#isa-families input[data-family="Arm"]')
+        cb.evaluate("el => el.click()")
+        page.wait_for_timeout(300)
+        assert _marked(page) == [], _preset_marks(page)
+
+        # Kind chip.
+        page.locator("#isa-default").click()
+        page.wait_for_timeout(300)
+        assert _marked(page) == ["isa-default"], _preset_marks(page)
+        cb = page.locator('#kind-bar input[data-kind="instruction"]')
+        cb.evaluate("el => el.click()")
+        page.wait_for_timeout(300)
+        assert _marked(page) == [], _preset_marks(page)
+    finally:
+        page.close()
+
+
+def test_cuda_row_header_labels_each_link_once(browser, fixture_url):
+    """The __activemask header labels each link once: the instruction-row
+    link reads 'PTX reference', never a second 'Reference'."""
+    page = browser.new_page(viewport={"width": 1440, "height": 900})
+    try:
+        _open(page, fixture_url)
+        row = _links(page, fixture_url, "__activemask", "__activemask")
+        labels = [t for t, _ in row]
+        assert len(labels) == len(set(labels)), row
+        assert "PTX reference" in labels, row
+    finally:
+        page.close()
+
+
+def test_two_header_links_with_one_url_show_once(browser, shared_ref_url):
+    """A reference_url equal to the instruction row's URL renders one
+    link, not two."""
+    page = browser.new_page(viewport={"width": 1440, "height": 900})
+    try:
+        _open(page, shared_ref_url)
+        row = _links(page, shared_ref_url, "__activemask", "__activemask")
+        hrefs = [h for _, h in row]
+        assert len(hrefs) == len(set(hrefs)), row
+        ptx = [h for h in hrefs if "parallel-thread-execution" in (h or "")]
+        assert len(ptx) == 1, row
     finally:
         page.close()

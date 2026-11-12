@@ -294,6 +294,11 @@ body {
   font-size: 0.75rem;
   line-height: 1.3;
 }
+.preset-btn.active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
 .preset-btn:hover { background: var(--surface-hover); color: var(--text); }
 .isa-groups {
   display: flex;
