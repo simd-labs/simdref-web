@@ -76,8 +76,8 @@ def test_sm_50_hides_an_sm_70_row_and_sm_90_shows_it(browser, page_url, web_dir)
         titles = _titles(page)
         assert "__shfl_sync" in titles, titles
 
-        # The PTX instruction shard obeys the same rule.
-        page.locator("#isa-families label").filter(has_text="PTX").click()
+        # The PTX instruction shard obeys the same rule (the CUDA preset
+        # already enables PTX).
         page.wait_for_timeout(300)
         ptx = "shfl.sync.b32 d[|p], a, b, c, membermask"
         _pick_sm(page, "sm_50")
@@ -121,7 +121,13 @@ def test_x86_row_stays_under_the_sm_filter(browser, page_url, web_dir):
     try:
         _boot(page, page_url)
         _open_picker(page)
-        page.locator("#isa-families label").filter(has_text="CUDA").click()
+        # The CUDA preset reaches the preset-only families; x86 chips stay.
+        page.locator("#isa-cuda").click()
+        page.wait_for_timeout(300)
+        for family in ("SSE", "AVX"):
+            page.locator(f'#isa-families input[data-family="{family}"]').evaluate(
+                "el => el.click()"
+            )
         page.wait_for_timeout(300)
         page.locator("#query").fill("add")
         page.wait_for_timeout(400)
@@ -145,15 +151,14 @@ def test_sm_chip_hidden_without_cuda_or_ptx(browser, page_url, web_dir):
         _open_picker(page)
         group = page.locator("#sm-group")
         assert not group.is_visible(), "SM chip visible with only x86 families"
-        page.locator("#isa-families label").filter(has_text="CUDA").click()
+        # The CUDA preset enables CUDA and PTX and shows the chip.
+        page.locator("#isa-cuda").click()
         page.wait_for_timeout(300)
         assert group.is_visible(), "SM chip hidden with CUDA selected"
-        page.locator("#isa-families label").filter(has_text="CUDA").click()
+        # The Default preset drops the preset-only families again.
+        page.locator("#isa-default").click()
         page.wait_for_timeout(300)
         assert not group.is_visible(), "SM chip visible with CUDA deselected"
-        page.locator("#isa-families label").filter(has_text="PTX").click()
-        page.wait_for_timeout(300)
-        assert group.is_visible(), "SM chip hidden with PTX selected"
     finally:
         page.close()
 

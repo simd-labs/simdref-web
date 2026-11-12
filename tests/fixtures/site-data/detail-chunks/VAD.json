@@ -1,0 +1,28 @@
+{
+  "x86:vaddps (ymm, ymm, ymm)": {
+    "architecture": "x86",
+    "description": {
+      "Description": "Add packed single-precision floating-point values.",
+      "Operation": "DEST[255:0] := SRC1[255:0] + DEST[255:0]"
+    },
+    "display_architecture": "x86",
+    "display_form": "VADDPS (YMM, YMM, YMM)",
+    "display_isa": "AVX",
+    "display_mnemonic": "VADDPS",
+    "form": "VADDPS (YMM, YMM, YMM)",
+    "isa": [
+      "AVX"
+    ],
+    "linked_intrinsics": [
+      "_mm256_add_ps"
+    ],
+    "measurements": [],
+    "metadata": {
+      "url": "https://uops.info/html/x86/VADDPS_YMM_YMM_YMM.html"
+    },
+    "mnemonic": "VADDPS",
+    "operand_details": [],
+    "pdf_refs": [],
+    "summary": "Add packed single-precision floating-point values."
+  }
+}

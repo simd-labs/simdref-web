@@ -92,6 +92,9 @@ let FAMILY_SUB_ORDER = {};
 let DEFAULT_SUBS = {};
 let isaFamilyOrder = {};
 let ARCH_PRESETS = {};
+// chip_families from filter_spec.json: the families shown as chips, in
+// order. Null keeps the old behavior (every available family is a chip).
+let chipFamilies = null;
 let enabledArmArch = null; // null = no filter; Set of "A32"|"A64"|"BOTH" when active
 let activeCategory = null; // null = no filter; Intel intrinsic category when set
 
@@ -807,37 +810,19 @@ function renderMeasurements(measurements) {
 }
 
 /* ── Description sections ────────────────────────────────────────── */
-const descSectionOrder = [
-  "Description", "Operation", "Intrinsic Equivalents",
-  "Flags Affected", "Exceptions", "SIMD Floating-Point Exceptions",
-  "Numeric Exceptions", "Other Exceptions",
-  "Protected Mode Exceptions", "Real-Address Mode Exceptions",
-  "Virtual-8086 Mode Exceptions", "Compatibility Mode Exceptions",
-  "64-Bit Mode Exceptions", "Opcode & Modes", "Operand Encoding",
-];
 const codeSections = new Set(["Operation", "Intrinsic Equivalents"]);
 
+/* The record's own key order is the render order: simdref writes the
+   sections in doc page order, so no sort and no hand order here. */
 function renderDescriptionSections(description) {
   if (!description || !Object.keys(description).length) return "";
-  const shown = new Set();
   let html = "";
-  for (const key of descSectionOrder) {
-    if (description[key]) {
-      const isCode = codeSections.has(key);
-      html += `<details class="desc-section">
-        <summary>${esc(key)}</summary>
-        ${isCode ? `<pre class="desc-code">${esc(description[key])}</pre>` : `<div class="desc-body">${esc(description[key])}</div>`}
-      </details>`;
-      shown.add(key);
-    }
-  }
   for (const [key, value] of Object.entries(description)) {
-    if (!shown.has(key)) {
-      html += `<details class="desc-section">
+    const isCode = codeSections.has(key);
+    html += `<details class="desc-section">
         <summary>${esc(key)}</summary>
-        <div class="desc-body">${esc(value)}</div>
+        ${isCode ? `<pre class="desc-code">${esc(value)}</pre>` : `<div class="desc-body">${esc(value)}</div>`}
       </details>`;
-    }
   }
   return html;
 }
@@ -984,7 +969,7 @@ function renderIntrinsicDetail(item, detail) {
         ${instrPdfRefs.map(ref => `<a class="kv-link" href="${esc(ref.url || "")}" target="_blank" rel="noreferrer">${esc(ref.label || ref.source_id || "PDF")}${ref.page_start ? ` p${esc(ref.page_start)}` : ""}</a>`).join("")}
         ${detail && detail.url ? kvLink("Source", detail.url) : ""}
         ${meta.reference_url ? kvLink("Reference", meta.reference_url) : ""}
-        ${instrMeta.url ? kvLink("uops.info", canonUrl(instrMeta.url)) : ""}
+        ${instrMeta.url ? kvLink(linkLabel(instrMeta.url), canonUrl(instrMeta.url)) : ""}
         ${instrMeta["url-ref"] ? kvLink("Instr Ref", canonUrl(instrMeta["url-ref"])) : ""}
       </div>
       ${perfSummary(detail && detail._measurements)}
@@ -1052,6 +1037,15 @@ function kvChip(label, value) {
 function kvLink(label, href) {
   return `<a class="kv-link" href="${esc(href)}" target="_blank" rel="noreferrer">${esc(label)}</a>`;
 }
+/* The link names its host class: uops.info rows keep the site name,
+   any other reference reads "Reference". */
+function linkLabel(url) {
+  try {
+    return new URL(url).hostname.endsWith("uops.info") ? "uops.info" : "Reference";
+  } catch (_) {
+    return "Reference";
+  }
+}
 
 function renderInstructionDetail(item, detail) {
   const d = detail || {};
@@ -1081,7 +1075,7 @@ function renderInstructionDetail(item, detail) {
       </div>
       <div class="kv-links">
         ${pdfRefs.map(ref => `<a class="kv-link" href="${esc(ref.url || "")}" target="_blank" rel="noreferrer">${esc(ref.label || ref.source_id || "PDF")}${ref.page_start ? ` p${esc(ref.page_start)}` : ""}</a>`).join("")}
-        ${meta.url ? kvLink("uops.info", canonUrl(meta.url)) : ""}
+        ${meta.url ? kvLink(linkLabel(meta.url), canonUrl(meta.url)) : ""}
         ${meta["url-ref"] ? kvLink("Reference", canonUrl(meta["url-ref"])) : ""}
       </div>
       ${perfSummary(measurements)}
@@ -1222,14 +1216,22 @@ function filtersModifiedByUser() {
 
 function updateIsaSummary() {
   if (enableAllIsas) { isaSummary.textContent = "ISA: All"; return; }
-  const active = availableIsas.filter(v => enabledIsas.has(v));
+  // Chip families first in family order, then preset-only families by
+  // name, so the CUDA preset reads "CUDA, PTX" (TUI parity).
+  const chipSet = chipFamilies ? new Set(chipFamilies) : null;
+  const chips = availableIsas.filter(v => enabledIsas.has(v) && (!chipSet || chipSet.has(v)));
+  const presetOnly = chipSet ? [...enabledIsas].filter(v => !chipSet.has(v)).sort() : [];
+  const active = [...chips, ...presetOnly];
   if (!active.length) { isaSummary.textContent = "ISA: None"; return; }
   if (active.length <= 3) { isaSummary.textContent = "ISA: " + active.join(", "); return; }
   isaSummary.textContent = `ISA: ${active.slice(0, 2).join(", ")} +${active.length - 2}`;
 }
 
 function renderIsaFilters() {
-  isaFamiliesNode.innerHTML = availableIsas.map(family => {
+  // chip_families names the chips in order; without the key every
+  // available family is a chip, like before the key existed.
+  const chipList = chipFamilies ? chipFamilies.filter(f => availableIsas.includes(f)) : availableIsas;
+  isaFamiliesNode.innerHTML = chipList.map(family => {
     const familyActive = enableAllIsas || enabledIsas.has(family);
     return `<label class="isa-chip ${familyActive ? "active" : ""}">
       <input type="checkbox" data-family="${esc(family)}" ${familyActive ? "checked" : ""}>
@@ -1237,7 +1239,7 @@ function renderIsaFilters() {
     </label>`;
   }).join("");
 
-  isaSubgroupsNode.innerHTML = availableIsas.flatMap(family => {
+  isaSubgroupsNode.innerHTML = chipList.flatMap(family => {
     const subs = FAMILY_SUB_ORDER[family];
     const familyActive = enableAllIsas || enabledIsas.has(family);
     if (!subs || !familyActive) return [];
@@ -1900,6 +1902,7 @@ dataReady.then(() => {
       FAMILY_SUB_ORDER = config.family_sub_order || {};
       DEFAULT_SUBS = Object.fromEntries(Object.entries(config.default_subs || {}).map(([family, values]) => [family, new Set(values)]));
       isaFamilyOrder = config.family_order || {};
+      chipFamilies = Array.isArray(config.chip_families) ? [...config.chip_families] : null;
       ARCH_PRESETS = config.presets && typeof config.presets === "object" ? config.presets : {};
       // The SM chip list comes from FilterSpec.sm_levels alone.
       smLevels = Array.isArray(config.sm_levels) ? [...config.sm_levels] : [];
@@ -1933,13 +1936,17 @@ dataReady.then(() => {
       enabledIsas = new Set([...defaultEnabledIsas].filter(v => availableIsas.includes(v)));
       initEnabledSubIsas();
 
-      // Ensure a CUDA preset exists so the CUDA button can select only the
-      // CUDA family. Derive the family name from the same availableIsas list
-      // the CUDA chip reads, so it stays in sync with the data.
+      // Ensure a CUDA preset exists so the CUDA button can select the CUDA
+      // family and the PTX family: CUDA intrinsic rows carry family CUDA and
+      // every PTX instruction row carries family PTX, so one without the
+      // other leaves a kind empty. Derive the family names from the same
+      // availableIsas list the chips read, so they stay in sync with the data.
       if (!ARCH_PRESETS["cuda"]) {
-        const cudaFamily = availableIsas.find((f) => f.toLowerCase() === "cuda") || "CUDA";
+        const find = (name) => availableIsas.find((f) => String(f).toLowerCase() === name) || null;
+        const cudaFamily = find("cuda") || "CUDA";
+        const ptxFamily = find("ptx");
         ARCH_PRESETS["cuda"] = {
-          families: [cudaFamily],
+          families: ptxFamily ? [cudaFamily, ptxFamily] : [cudaFamily],
           subs: [],
           kind: ["intrinsic", "instruction"],
           arm_arch: null,

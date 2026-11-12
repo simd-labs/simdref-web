@@ -72,10 +72,16 @@ def _open(page, url):
 
 
 def _enable_families(page, families):
-    """Switch the named ISA families on in the picker."""
+    """Switch the named ISA families on: the CUDA preset reaches the
+    preset-only CUDA and PTX families, the chips cover the rest."""
     page.locator("#isa-toggle").click()
     page.wait_for_selector("#isa-panel:not(.hidden)", timeout=10_000)
-    for family in families:
+    wanted = list(families)
+    if "CUDA" in wanted or "PTX" in wanted:
+        page.locator("#isa-cuda").click()
+        page.wait_for_timeout(200)
+        wanted = [f for f in wanted if f not in ("CUDA", "PTX")]
+    for family in wanted:
         # The checkbox hides inside its label, so click it through the DOM.
         cb = page.locator(f'#isa-families input[data-family="{family}"]')
         if not cb.is_checked():
@@ -136,7 +142,7 @@ def test_f1_row_and_detail_show_the_cuda_badge_once(browser, fixture_url):
     page = browser.new_page(viewport={"width": 1440, "height": 900})
     try:
         _open(page, fixture_url)
-        _enable_families(page, ["CUDA", "Arm", "PTX"])
+        _enable_families(page, ["SSE", "CUDA", "Arm", "PTX"])
 
         _search(page, "__shfl_sync", "__shfl_sync")
         badges = _row_badges(page)
@@ -168,7 +174,7 @@ def test_f2_doc_section_title_comes_from_the_record(browser, fixture_url):
     page = browser.new_page(viewport={"width": 1440, "height": 900})
     try:
         _open(page, fixture_url)
-        _enable_families(page, ["CUDA", "Arm"])
+        _enable_families(page, ["SSE", "CUDA", "Arm"])
 
         # metadata.doc_source "cuda-guide" names the block.
         _open_detail(page, "__shfl_sync", "__shfl_sync")

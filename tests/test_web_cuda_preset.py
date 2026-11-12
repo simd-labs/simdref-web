@@ -1,8 +1,8 @@
-"""Browser test: the CUDA preset selects only the CUDA family.
+"""Browser test: the CUDA preset selects the CUDA and PTX families.
 
-Clicking the CUDA preset button (between RISC-V and None) must activate
-only the CUDA family chip, name the toggle label "CUDA", and restrict a
-search for ``__shfl_sync`` to CUDA-only results.
+Clicking the CUDA preset button (between RISC-V and None) must enable
+the preset-only CUDA and PTX families without a chip for either, name
+the toggle label "CUDA, PTX", and keep both result kinds on.
 
 Skips when Playwright or its chromium browser aren't installed so the
 suite stays green on minimal CI images. The shared harness (site
@@ -18,9 +18,9 @@ def _open_picker(page) -> None:
     page.wait_for_selector("#isa-panel:not(.hidden)", timeout=10_000)
 
 
-def test_cuda_preset_selects_only_cuda_family(browser, page_url):
-    """The CUDA preset activates only the CUDA chip, labels the toggle
-    'CUDA', and a __shfl_sync search returns CUDA-only results."""
+def test_cuda_preset_selects_cuda_and_ptx_families(browser, page_url):
+    """The CUDA preset enables CUDA and PTX with no chips for either,
+    labels the toggle 'CUDA, PTX', and keeps both result kinds on."""
     page = browser.new_page()
     try:
         page.goto(page_url)
@@ -44,16 +44,30 @@ def test_cuda_preset_selects_only_cuda_family(browser, page_url):
         page.locator("#isa-cuda").click()
         page.wait_for_timeout(300)
 
-        # Only the CUDA chip is active.
+        # Only the preset-only families are on, and no chip shows them.
         active = page.eval_on_selector_all(
             "#isa-families .isa-chip",
             "els => els.filter(e => e.classList.contains('active')).map(e => e.textContent.trim())",
         )
-        assert active == ["CUDA"], f"expected only CUDA active, got {active}"
+        assert active == [], f"expected no active family chip, got {active}"
+        chips = page.eval_on_selector_all(
+            "#isa-families .isa-chip",
+            "els => els.map(e => e.textContent.trim())",
+        )
+        assert not any(c in ("CUDA", "PTX") for c in chips), (
+            f"preset-only families as chips: {chips}"
+        )
 
-        # The toggle label names CUDA.
+        # The toggle label names CUDA and PTX.
         label = page.locator("#isa-summary").inner_text()
-        assert label == "ISA: CUDA", f"expected 'ISA: CUDA', got {label!r}"
+        assert label == "ISA: CUDA, PTX", f"expected 'ISA: CUDA, PTX', got {label!r}"
+
+        # The kind bar keeps both kinds on: intrinsic and instruction rows.
+        kinds = page.eval_on_selector_all(
+            "#kind-bar input[data-kind]",
+            "els => els.map(e => [e.dataset.kind, e.checked])",
+        )
+        assert kinds and all(checked for _, checked in kinds), f"kind not both: {kinds}"
 
         # At phone width (390x844) the preset row must wrap inside the
         # viewport: every .preset-btn lies inside the viewport and keeps a
@@ -69,7 +83,7 @@ def test_cuda_preset_selects_only_cuda_family(browser, page_url):
             f"preset buttons have differing heights: {btns}"
         )
 
-        # A search for __shfl_sync lists only CUDA results.
+        # A search for __shfl_sync lists only CUDA and PTX results.
         page.locator("#query").fill("__shfl_sync")
         page.wait_for_timeout(400)
         page.wait_for_selector(".result", timeout=10_000)
@@ -78,6 +92,9 @@ def test_cuda_preset_selects_only_cuda_family(browser, page_url):
             ".result .result-isa", "els => els.map(e => e.textContent.trim())"
         )
         assert isas, "no results for __shfl_sync"
-        assert all(i == "CUDA" for i in isas), f"expected only CUDA results, got {isas}"
+        assert any(i == "CUDA" for i in isas), f"no CUDA results: {isas}"
+        assert all(i in ("CUDA", "ptx", "PTX") for i in isas), (
+            f"expected only CUDA/PTX results, got {isas}"
+        )
     finally:
         page.close()
