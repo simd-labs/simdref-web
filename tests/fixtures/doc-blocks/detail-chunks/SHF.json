@@ -1,0 +1,187 @@
+{
+ "ptx:shfl.sync.b32 d[|p], a, b, c, membermask": {
+  "architecture": "ptx",
+  "description": {
+   "Syntax": "shfl.sync.mode.b32  d[|p], a, b, c, membermask;"
+  },
+  "display_architecture": "ptx",
+  "display_form": "d[|p], a, b, c, membermask",
+  "display_isa": "PTX",
+  "display_mnemonic": "shfl.sync.b32",
+  "doc_sources": [
+   {
+    "heading": "flane.sync.b32",
+    "sections": [
+     {
+      "blocks": [
+       {
+        "caption": "Form",
+        "kind": "code",
+        "lang": "ptx",
+        "text": "flane.sync.mode.b32  d[|p], a, b, c, membermask;"
+       }
+      ],
+      "heading": "Syntax"
+     },
+     {
+      "blocks": [
+       {
+        "kind": "paragraph",
+        "runs": [
+         [
+          "text",
+          "Copies a "
+         ],
+         [
+          "code",
+          "32-bit value"
+         ],
+         [
+          "text",
+          " between the lanes named by the "
+         ],
+         [
+          "em",
+          "mode modifier"
+         ],
+         [
+          "text",
+          ". See the "
+         ],
+         [
+          "link",
+          "mode table",
+          "https://docs.example.test/ptx/lane-mirror.html#modes"
+         ],
+         [
+          "text",
+          "."
+         ]
+        ],
+        "text": "Copies a 32-bit value between the lanes named by the mode modifier. See the mode table."
+       },
+       {
+        "items": [
+         {
+          "name": ".all",
+          "text": "All lanes take part."
+         },
+         {
+          "name": ".up",
+          "text": "Copies from a lane with a higher id."
+         },
+         {
+          "name": ".down",
+          "text": "Copies from a lane with a lower id."
+         },
+         {
+          "name": ".xor",
+          "runs": [
+           [
+            "text",
+            "Copies from the lane with the "
+           ],
+           [
+            "em",
+            "xored"
+           ],
+           [
+            "text",
+            " id."
+           ]
+          ],
+          "text": "Copies from the lane with the xored id."
+         }
+        ],
+        "kind": "deflist"
+       }
+      ],
+      "heading": "Description"
+     },
+     {
+      "blocks": [
+       {
+        "kind": "code",
+        "lang": "text",
+        "text": "d = lane_value[a]; p = lane_active;"
+       },
+       {
+        "kind": "math",
+        "tex": "d = a[b]",
+        "text": "d = a[b]"
+       }
+      ],
+      "heading": "Semantics"
+     },
+     {
+      "blocks": [
+       {
+        "kind": "paragraph",
+        "text": "Introduced in PTX ISA 6.0."
+       }
+      ],
+      "heading": "PTX ISA Notes"
+     },
+     {
+      "blocks": [
+       {
+        "kind": "paragraph",
+        "text": "Requires sm_30 or higher."
+       }
+      ],
+      "heading": "Target ISA Notes"
+     },
+     {
+      "blocks": [
+       {
+        "caption": "Example",
+        "kind": "code",
+        "lang": "ptx",
+        "text": "// pick from a lane\nloop:\n.reg .b32 %r1;\n@!p flane.sync.b32 %r1, %r2, %r3, 0xffffffff;"
+       }
+      ],
+      "heading": "Examples"
+     }
+    ],
+    "shared": false,
+    "source": "ptx-isa",
+    "url": "https://docs.example.test/ptx/lane-mirror.html#flane-sync-b32"
+   },
+   {
+    "heading": "flane.sync.b32 (alt form)",
+    "sections": [
+     {
+      "blocks": [
+       {
+        "kind": "paragraph",
+        "text": "An alternative notation for the same instruction."
+       }
+      ],
+      "heading": "Notes"
+     }
+    ],
+    "shared": false,
+    "source": "ptx-isa",
+    "url": "https://docs.example.test/ptx/lane-mirror.html#flane-sync-b32"
+   }
+  ],
+  "form": "d[|p], a, b, c, membermask",
+  "isa": [
+   "PTX"
+  ],
+  "linked_intrinsics": [
+   "__shfl_sync",
+   "__shfl_up_sync",
+   "__shfl_xor_sync"
+  ],
+  "measurements": [],
+  "metadata": {
+   "ptx_isa": "6.0",
+   "sm": "sm_30"
+  },
+  "mnemonic": "shfl.sync.b32",
+  "operand_details": [],
+  "pdf_refs": [],
+  "summary": "shfl.sync.b32 instruction in Data Movement and Conversion Instructions. Qualifier sets: mode. Introduced in PTX ISA 6.0. Requires sm_30 or higher."
+ }
+}

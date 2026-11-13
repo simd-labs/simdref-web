@@ -851,6 +851,370 @@ function renderDescriptionSections(description) {
   return html;
 }
 
+/* ── Doc source groups ────────────────────────────────────────────── */
+/* Doc text renders only from the ordered doc_sources blocks (the
+   doc_sources contract in the simdref design). Every node is built with
+   textContent, so doc text never passes through innerHTML. Block and
+   group order is the stored list order; nothing is sorted here. Entry
+   keys this renderer does not use (page, signature, signature_runs)
+   stay ignored; the render never fails on them. */
+
+const docNoteLabels = {note: "Note", seealso: "See also", hint: "Hint", warning: "Warning"};
+
+/* Inline runs: [kind, text], ['link', text, href] and ['math', text,
+   tex]. Only http(s) hrefs become links. A same-site function link runs
+   a search for its name: the linked page is not on this site. */
+function docRunsNodes(runs) {
+  const out = [];
+  for (const run of Array.isArray(runs) ? runs : []) {
+    const kind = Array.isArray(run) ? run[0] : "text";
+    const text = String((Array.isArray(run) ? run[1] : run) ?? "");
+    let el = null;
+    if (kind === "code" || kind === "em" || kind === "strong") {
+      el = document.createElement(kind);
+    } else if (kind === "link") {
+      const href = String((Array.isArray(run) ? run[2] : "") ?? "");
+      if (href.startsWith("http://") || href.startsWith("https://")) {
+        el = document.createElement("a");
+        el.href = href;
+        el.target = "_blank";
+        el.rel = "noreferrer";
+        el.className = "doc-link";
+      } else {
+        el = document.createElement("button");
+        el.type = "button";
+        el.className = "doc-fnlink";
+        el.addEventListener("click", () => {
+          queryInput.value = text;
+          queryInput.dispatchEvent(new Event("input"));
+        });
+      }
+    } else if (kind === "math") {
+      el = document.createElement("span");
+      el.className = "doc-math-inline";
+      const tex = Array.isArray(run) ? run[2] : "";
+      if (tex) el.title = String(tex);
+    }
+    if (el) {
+      el.textContent = text;
+      out.push(el);
+    } else {
+      out.push(document.createTextNode(text));
+    }
+  }
+  return out;
+}
+
+/* Inline content of a block or list item: the runs when they exist,
+   the plain text otherwise. Old data keeps rendering. */
+function docInline(el, src) {
+  const runs = src && src.runs;
+  if (Array.isArray(runs) && runs.length) {
+    for (const node of docRunsNodes(runs)) el.append(node);
+  } else {
+    el.textContent = String((src && src.text) ?? src ?? "");
+  }
+}
+
+/* Block lang to a highlight.js grammar: cuda and c++ mean cpp, bash
+   means bash. ptx goes through the local tokenizer below, text stays
+   plain. */
+const docCodeLangs = {cuda: "cpp", "c++": "cpp", cpp: "cpp", bash: "bash"};
+
+function ptxSpan(cls, text) {
+  const s = document.createElement("span");
+  s.className = cls;
+  s.textContent = text;
+  return s;
+}
+
+/* PTX highlight: walk each line's characters (no RegExp) and map the
+   PTX token classes onto the hljs theme classes, so the light and dark
+   hljs themes color ptx blocks like the hljs grammars. Word runs end
+   at any character outside the PTX word set. A comment runs to the end
+   of its line, the first content word of a line is the opcode (after
+   any predicate guard), a leading dot word is a directive, a trailing
+   colon word is a label, %reg and @p guards are variables and digit-led
+   words are numbers. */
+function ptxTokenNodes(text) {
+  const frag = document.createDocumentFragment();
+  const isWordChar = (c) => {
+    const u = c.charCodeAt(0);
+    return (
+      (u >= 48 && u <= 57) || (u >= 65 && u <= 90) || (u >= 97 && u <= 122) ||
+      c === "." || c === "_" || c === "$" || c === "%" || c === "@" || c === "!" || c === ":"
+    );
+  };
+  const lines = String(text).split("\n");
+  for (let li = 0; li < lines.length; li++) {
+    const line = lines[li];
+    let i = 0;
+    let plain = "";
+    let wantOpcode = true;
+    let guard = false;
+    const flush = () => {
+      if (plain) {
+        frag.append(document.createTextNode(plain));
+        plain = "";
+      }
+    };
+    while (i < line.length) {
+      const c = line[i];
+      if (c === "/" && line[i + 1] === "/") {
+        flush();
+        frag.append(ptxSpan("hljs-comment", line.slice(i)));
+        i = line.length;
+        break;
+      }
+      if (!isWordChar(c)) {
+        plain += c;
+        i++;
+        continue;
+      }
+      let j = i;
+      while (j < line.length && isWordChar(line[j])) j++;
+      const w = line.slice(i, j);
+      i = j;
+      let cls = null;
+      if (w[w.length - 1] === ":") {
+        cls = "hljs-title";
+      } else if (w[0] === "%") {
+        cls = "hljs-variable";
+      } else if (w[0] === "@") {
+        cls = "hljs-variable";
+        guard = true;
+      } else if (w[0] === "." && wantOpcode && !guard) {
+        cls = "hljs-meta";
+        wantOpcode = false;
+      } else if (wantOpcode || guard) {
+        cls = "hljs-keyword";
+        wantOpcode = false;
+        guard = false;
+      } else if (w[0] >= "0" && w[0] <= "9") {
+        cls = "hljs-number";
+      }
+      flush();
+      if (cls) frag.append(ptxSpan(cls, w));
+      else frag.append(document.createTextNode(w));
+    }
+    flush();
+    if (li + 1 < lines.length) frag.append(document.createTextNode("\n"));
+  }
+  return frag;
+}
+
+function docCodeEl(b) {
+  const pre = document.createElement("pre");
+  pre.className = "desc-code";
+  const code = document.createElement("code");
+  const lang = String(b.lang ?? "").toLowerCase();
+  const hlLang = docCodeLangs[lang];
+  if (lang) code.dataset.lang = lang;
+  if (hlLang) {
+    code.className = "language-" + hlLang;
+    code.dataset.hl = hlLang;
+  }
+  if (lang === "ptx") {
+    // The hljs theme classes give the colors; spans are plain DOM text.
+    code.className = "hljs";
+    code.append(ptxTokenNodes(b.text ?? ""));
+  } else {
+    code.textContent = String(b.text ?? "");
+  }
+  pre.append(code);
+  if (!b.caption) return pre;
+  const wrap = document.createDocumentFragment();
+  const cap = document.createElement("div");
+  cap.className = "doc-code-caption";
+  cap.textContent = String(b.caption ?? "");
+  wrap.append(cap, pre);
+  return wrap;
+}
+
+/* hljs output goes into the code element it owns: hljs escapes its
+   input, and no other innerHTML carries doc data. One pass per
+   element, and a re-run after the lazy hljs load lands. */
+function refreshDocHighlight() {
+  if (!window.hljs) return;
+  for (const el of document.querySelectorAll("code[data-hl]")) {
+    if (el.dataset.hlDone === "1" || !window.hljs.getLanguage(el.dataset.hl)) continue;
+    try {
+      el.innerHTML = window.hljs.highlight(el.textContent, {language: el.dataset.hl, ignoreIllegals: true}).value;
+      el.classList.add("hljs");
+      el.dataset.hlDone = "1";
+    } catch (_) { /* the block stays plain text */ }
+  }
+}
+
+function docBlockEl(blk) {
+  const b = (blk && typeof blk === "object") ? blk : {text: String(blk ?? "")};
+  if (b.kind === "code") return docCodeEl(b);
+  if (b.kind === "list") {
+    const list = document.createElement(b.ordered ? "ol" : "ul");
+    list.className = "doc-list";
+    for (const item of b.items || []) {
+      const li = document.createElement("li");
+      const src = (item && typeof item === "object") ? item : {text: String(item ?? "")};
+      docInline(li, src);
+      for (const inner of src.blocks || []) li.append(docBlockEl(inner));
+      list.append(li);
+    }
+    return list;
+  }
+  if (b.kind === "table") {
+    const table = document.createElement("table");
+    table.className = "doc-table";
+    if (b.caption) {
+      const cap = document.createElement("caption");
+      cap.textContent = String(b.caption ?? "");
+      table.append(cap);
+    }
+    /* header and rows each carry rows of cells; one bare cell row is
+       accepted as a single row. */
+    const head = Array.isArray(b.header) ? b.header : [];
+    const headRows = head.length && Array.isArray(head[0]) ? head : (head.length ? [head] : []);
+    const body = Array.isArray(b.rows) ? b.rows : [];
+    const bodyRows = body.length && Array.isArray(body[0]) ? body : (body.length ? [body] : []);
+    if (headRows.length) {
+      const thead = document.createElement("thead");
+      for (const row of headRows) {
+        const tr = document.createElement("tr");
+        for (const cell of row || []) {
+          const th = document.createElement("th");
+          th.textContent = String(cell ?? "");
+          tr.append(th);
+        }
+        thead.append(tr);
+      }
+      table.append(thead);
+    }
+    const tbody = document.createElement("tbody");
+    for (const row of bodyRows) {
+      const tr = document.createElement("tr");
+      for (const cell of row || []) {
+        const td = document.createElement("td");
+        td.textContent = String(cell ?? "");
+        tr.append(td);
+      }
+      tbody.append(tr);
+    }
+    table.append(tbody);
+    return table;
+  }
+  if (b.kind === "note") {
+    const aside = document.createElement("aside");
+    const kind = String(b.note ?? "note").toLowerCase();
+    aside.className = "doc-note doc-note-" + kind;
+    const label = document.createElement("span");
+    label.className = "doc-note-kind";
+    label.textContent = docNoteLabels[kind] || kind.charAt(0).toUpperCase() + kind.slice(1);
+    const body = document.createElement("span");
+    body.className = "doc-note-body";
+    docInline(body, b);
+    /* The separator is a text node so the line reads "Warning: body" as
+     * rendered text, the same form the TUI prints. */
+    aside.append(label, ": ", body);
+    return aside;
+  }
+  if (b.kind === "deflist") {
+    const dl = document.createElement("dl");
+    dl.className = "doc-deflist";
+    for (const item of b.items || []) {
+      const dt = document.createElement("dt");
+      dt.textContent = String((item && item.name) ?? "");
+      const dd = document.createElement("dd");
+      docInline(dd, item || {});
+      dl.append(dt, dd);
+    }
+    return dl;
+  }
+  if (b.kind === "math") {
+    const div = document.createElement("div");
+    div.className = "doc-math";
+    div.textContent = String(b.text ?? "");
+    if (b.tex) div.title = String(b.tex);
+    return div;
+  }
+  const p = document.createElement("p");
+  p.className = "doc-p";
+  docInline(p, b);
+  return p;
+}
+
+function docGroupShared(src) {
+  return (src && src.shared === true) || (src.sections || []).some(
+    s => (s && s.shared === true) || ((s && s.blocks) || []).some(bk => bk && bk.shared === true)
+  );
+}
+
+function fillDocGroups(container, sources) {
+  if (!container) return;
+  const list = (Array.isArray(sources) ? sources : []).filter(Boolean);
+  /* Design D: the linked PTX group renders last. The other groups keep
+     their list order. */
+  const ordered = [
+    ...list.filter(s => s.source !== "ptx-isa"),
+    ...list.filter(s => s.source === "ptx-isa"),
+  ];
+  for (const src of ordered) {
+    const group = document.createElement("section");
+    group.className = "doc-group";
+    const head = document.createElement("h4");
+    head.className = "doc-group-head";
+    const srcLabel = src.title || src.source || "";
+    head.textContent = src.heading ? `${src.heading} (${srcLabel})` : srcLabel;
+    if (docGroupShared(src)) {
+      const mark = document.createElement("span");
+      mark.className = "doc-family";
+      mark.textContent = "family";
+      head.append(document.createTextNode(" "), mark);
+    }
+    group.append(head);
+    for (const sec of src.sections || []) {
+      if (sec && sec.heading) {
+        const sh = document.createElement("h5");
+        sh.className = "doc-sub";
+        sh.textContent = String(sec.heading ?? "");
+        group.append(sh);
+      }
+      for (const blk of (sec && sec.blocks) || []) group.append(docBlockEl(blk));
+    }
+    container.append(group);
+  }
+}
+
+/* Header signature line: a CUDA row carries a C++ signature, so that
+   line takes the cpp grammar. Any other row keeps plain text. */
+function finishDocRender(root, item) {
+  const pre = root.querySelector("pre.sig");
+  const arch = String((item && (item.architecture || item.display_architecture)) || "").toLowerCase();
+  if (pre && pre.textContent && arch === "cuda") {
+    const code = document.createElement("code");
+    code.className = "language-cpp";
+    code.dataset.hl = "cpp";
+    code.textContent = pre.textContent;
+    pre.textContent = "";
+    pre.append(code);
+  }
+  ensureHljs().then(refreshDocHighlight);
+}
+
+/* One header link per distinct URL (first occurrence wins), labelled by
+   entry.title, falling back to entry.source. Rows with no doc_sources
+   keep the single Source url link. */
+function docSourceLinks(detail) {
+  const sources = detail && Array.isArray(detail.doc_sources) ? detail.doc_sources : [];
+  const seen = new Set();
+  const out = [];
+  for (const s of sources.filter(Boolean)) {
+    const url = s.url;
+    if (!url || seen.has(url)) continue;
+    seen.add(url);
+    out.push([(s.title || s.source) || "Source", url]);
+  }
+  return out;
+}
+
 /* ── Detail rendering ─────────────────────────────────────────────── */
 const operandHeaders = [
   {key: "idx", label: "Idx"},
@@ -929,6 +1293,9 @@ function _c3apply() {
   for (const b of detail.querySelectorAll(".detail-tabs button:not(.detail-all)")) {
     const label = b.textContent.replace(/^\d /, "");
     const has = [...kinds.values()].includes(label);
+    // A tab with no section behind it never shows: no disabled ghost tab
+    // and no "no data" placeholder (design D).
+    b.hidden = !has;
     b.disabled = !has;
     b.title = has ? "" : `No ${label.toLowerCase()} data for this entry`;
     b.setAttribute("aria-pressed", has && label === t ? "true" : "false");
@@ -987,6 +1354,7 @@ function renderIntrinsicDetail(item, detail) {
   const hasMeasurements = detail && detail._measurements && detail._measurements.length;
   const hasOperands = detail && detail._operands && detail._operands.length;
   const meta = detail ? (detail.metadata || {}) : (item.metadata || {});
+  const docLinks = docSourceLinks(detail);
   const instrMeta = detail ? (detail._instructionMeta || {}) : {};
   const instrPdfRefs = detail ? (detail._pdfRefs || []) : [];
 
@@ -1003,7 +1371,7 @@ function renderIntrinsicDetail(item, detail) {
       <div class="kv-links">
         ${instrPdfRefs.map(ref => `<a class="kv-link" href="${esc(ref.url || "")}" target="_blank" rel="noreferrer">${esc(ref.label || ref.source_id || "PDF")}${ref.page_start ? ` p${esc(ref.page_start)}` : ""}</a>`).join("")}
         ${kvLinks([
-          ["Source", detail && detail.url],
+          ...(docLinks.length ? docLinks : [["Source", detail && detail.url]]),
           ["Reference", meta.reference_url],
           [instrMeta.url ? linkLabel(instrMeta.url) : "", instrMeta.url],
           ["Instr Ref", instrMeta["url-ref"]],
@@ -1032,7 +1400,6 @@ function renderIntrinsicDetail(item, detail) {
         ${meta.classification_path ? kvChip("Section", meta.classification_path) : ""}
         ${detail && detail._linkedInstruction ? kvChip("Instruction", detail._linkedInstruction) : ""}
         ${meta.argument_preparation ? kvChip("Arg Prep", meta.argument_preparation) : ""}
-        ${meta.result ? kvChip("Result", meta.result) : ""}
         ${detail && detail.notes && detail.notes.length ? kvChip("Notes", detail.notes.join("; ")) : ""}
       </div>
     </section>
@@ -1056,11 +1423,14 @@ function renderIntrinsicDetail(item, detail) {
         linked
       ) : `<div style="color:var(--text-muted);font-size:0.82rem">No linked instructions.</div>`}
     </section>
-    ${detail && sectionEntries(detail.doc_sections).length ? `<section class="section">
+    ${docLinks.length ? `<section class="section">
+      <div class="doc-groups"></div>
+    </section>` : ""}
+    ${!docLinks.length && detail && sectionEntries(detail.doc_sections).length ? `<section class="section">
       <h3>${esc(docSectionTitle(detail))}</h3>
       ${renderDescriptionSections(detail.doc_sections)}
     </section>` : ""}
-    ${detail && sectionEntries(detail._instrDescription).length ? `<section class="section">
+    ${!docLinks.length && detail && sectionEntries(detail._instrDescription).length ? `<section class="section">
       <h3>Instruction Semantics</h3>
       ${renderDescriptionSections(detail._instrDescription)}
     </section>` : ""}
@@ -1110,6 +1480,7 @@ function renderInstructionDetail(item, detail) {
   const measurements = d.measurements || [];
   const operands = d.operand_details || [];
   const meta = d.metadata || {};
+  const docLinks = docSourceLinks(d);
   const pdfRefs = Array.isArray(d.pdf_refs) ? d.pdf_refs : (meta["intel-sdm-url"] ? [{
     source_id: "intel-sdm",
     label: "Intel SDM",
@@ -1130,7 +1501,7 @@ function renderInstructionDetail(item, detail) {
       <div class="kv-links">
         ${pdfRefs.map(ref => `<a class="kv-link" href="${esc(ref.url || "")}" target="_blank" rel="noreferrer">${esc(ref.label || ref.source_id || "PDF")}${ref.page_start ? ` p${esc(ref.page_start)}` : ""}</a>`).join("")}
         ${kvLinks([
-          [meta.url ? linkLabel(meta.url) : "", meta.url],
+          ...(docLinks.length ? docLinks : [[meta.url ? linkLabel(meta.url) : "", meta.url]]),
           ["Reference", meta["url-ref"]],
         ])}
       </div>
@@ -1175,7 +1546,10 @@ function renderInstructionDetail(item, detail) {
         linked
       ) : `<div style="color:var(--text-muted);font-size:0.82rem">No linked intrinsics.</div>`}
     </section>
-    ${sectionEntries(d.description).length ? `<section class="section">
+    ${docLinks.length ? `<section class="section">
+      <div class="doc-groups"></div>
+    </section>` : ""}
+    ${!docLinks.length && sectionEntries(d.description).length ? `<section class="section">
       <h3>Instruction Semantics</h3>
       ${renderDescriptionSections(d.description)}
     </section>` : ""}
@@ -1235,12 +1609,16 @@ async function renderDetail(entry) {
       detail._pdfRefs = [];
     }
     _c3bar(); detailNode.innerHTML = renderIntrinsicDetail(entry.item, detail);
+    fillDocGroups(detailNode.querySelector(".doc-groups"), detail && detail.doc_sources);
+    finishDocRender(detailNode, entry.item);
   } else {
     // Load instruction detail chunk
     const prefix = chunkPrefix(entry.item.mnemonic);
     const chunk = await loadChunk(prefix);
     const detail = chunk[entry.item.key] || null;
     _c3bar(); detailNode.innerHTML = renderInstructionDetail(entry.item, detail);
+    fillDocGroups(detailNode.querySelector(".doc-groups"), detail && detail.doc_sources);
+    finishDocRender(detailNode, entry.item);
   }
 
 }
@@ -2677,9 +3055,10 @@ function escAnn(s) {
   return String(s).replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]);
 }
 
-/* Lazy-load highlight.js (core + x86asm + armasm) from jsDelivr on the
- * first Annotate-tab activation. Falls back to escaped plain text if
- * the CDN is unreachable — highlighting is a nicety, not essential. */
+/* Lazy-load highlight.js (core + x86asm + armasm + cpp + bash) from
+ * jsDelivr on the first doc or Annotate-tab render. Falls back to
+ * escaped plain text if the CDN is unreachable — highlighting is a
+ * nicety, not essential. */
 const HLJS_BASE = "https://cdn.jsdelivr.net/npm/@highlightjs/cdn-assets@11.10.0";
 let _hljsPromise = null;
 function ensureHljs() {
@@ -2707,6 +3086,8 @@ function ensureHljs() {
       .then(() => Promise.all([
         loadScript(`${HLJS_BASE}/languages/x86asm.min.js`),
         loadScript(`${HLJS_BASE}/languages/armasm.min.js`),
+        loadScript(`${HLJS_BASE}/languages/cpp.min.js`),
+        loadScript(`${HLJS_BASE}/languages/bash.min.js`),
       ]))
       .then(() => resolve(!!window.hljs))
       .catch(() => resolve(false));

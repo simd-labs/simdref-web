@@ -281,10 +281,10 @@ def _tab(page, label):
     )
 
 
-def test_missing_tabs_look_disabled(browser, site):
-    """A tab with no section behind it (no perf data, no operands) must look
-    disabled at first glance: dimmed, struck through, not-allowed cursor and
-    a tooltip. Enabled tabs keep the normal look."""
+def test_missing_tabs_are_hidden(browser, site):
+    """A tab with no section behind it (no perf data, no operands) must not
+    show at all: hidden and gone from the layout, with no placeholder. Tabs
+    with sections behind them stay visible and look enabled."""
     # The fixture ships no detail chunks, so _mm_add_ps has no perf there;
     # in a real export the sequence intrinsic below has no instruction.
     subject = "_mm_add_ps" if SITE_DATA == FIXTURE_SITE_DATA else "_mm512_mask_reduce_min_epi32"
@@ -301,28 +301,29 @@ def test_missing_tabs_look_disabled(browser, site):
         tabs = page.evaluate(
             """Array.from(document.querySelectorAll('#detail .detail-tabs button')).map(b => {
                 const s = getComputedStyle(b);
-                return {label: b.textContent, disabled: b.disabled, title: b.title,
+                return {label: b.textContent, hidden: b.hidden, display: s.display,
+                        disabled: b.disabled, title: b.title,
                         opacity: parseFloat(s.opacity), cursor: s.cursor,
                         strike: s.textDecorationLine.includes('line-through')};
             })"""
         )
-        off = [t for t in tabs if t["disabled"]]
-        on = [t for t in tabs if not t["disabled"]]
-        assert off and on, f"subject needs both enabled and disabled tabs: {tabs}"
+        off = [t for t in tabs if t["hidden"]]
+        on = [t for t in tabs if not t["hidden"]]
+        assert off and on, f"subject needs both shown and hidden tabs: {tabs}"
         for t in off:
-            assert (
-                t["opacity"] < 1 and t["cursor"] == "not-allowed" and t["strike"] and t["title"]
-            ), t
+            assert t["display"] == "none", t
         for t in on:
             assert (
                 t["opacity"] == 1
                 and t["cursor"] == "pointer"
                 and not t["strike"]
                 and not t["title"]
+                and not t["disabled"]
             ), t
-        print(
-            f"disabled tabs styled: {[t['label'] for t in off]}; enabled: {[t['label'] for t in on]}"
+        assert "No performance data." not in page.evaluate(
+            "document.querySelector('#detail').innerText"
         )
+        print(f"hidden tabs: {[t['label'] for t in off]}; shown: {[t['label'] for t in on]}")
     finally:
         page.close()
 

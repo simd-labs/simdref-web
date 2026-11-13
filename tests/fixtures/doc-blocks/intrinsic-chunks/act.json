@@ -1,0 +1,52 @@
+{
+ "__activemask": {
+  "architecture": "cuda",
+  "description": "Returns a 32-bit mask of the currently active threads in the warp.",
+  "display_architecture": "CUDA",
+  "display_isa": "CUDA",
+  "display_isa_tokens": [
+   "CUDA"
+  ],
+  "doc_sections": [
+   [
+    "Description",
+    "Returns a 32-bit mask of the lanes that are active."
+   ],
+   [
+    "Return",
+    "A mask of the active lanes."
+   ],
+   [
+    "Parameters",
+    "None."
+   ]
+  ],
+  "header": "__clang_cuda_intrinsics.h",
+  "instruction_refs": [
+   {
+    "architecture": "ptx",
+    "display_key": "activemask.b32",
+    "form": "",
+    "key": "ptx:activemask.b32",
+    "match_count": "1",
+    "name": "activemask.b32",
+    "resolution": "ptx-spelling",
+    "xed": ""
+   }
+  ],
+  "instructions": [
+   "activemask.b32"
+  ],
+  "isa": [
+   "CUDA"
+  ],
+  "metadata": {
+   "doc_source": "cuda-guide",
+   "reference_url": "https://docs.nvidia.com/cuda/cuda-math-api/"
+  },
+  "name": "__activemask",
+  "notes": [],
+  "signature": "unsigned __activemask (void);",
+  "url": "https://docs.nvidia.com/cuda/cuda-programming-guide/#activemask"
+ }
+}

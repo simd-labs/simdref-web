@@ -1,0 +1,78 @@
+{
+ "x86:vaddps (ymm, ymm, ymm)": {
+  "architecture": "x86",
+  "description": {
+   "Description": "Add packed single-precision floating-point values.",
+   "Operation": "DEST[255:0] := SRC1[255:0] + DEST[255:0]"
+  },
+  "display_architecture": "x86",
+  "display_form": "VADDPS (YMM, YMM, YMM)",
+  "display_isa": "AVX",
+  "display_mnemonic": "VADDPS",
+  "form": "VADDPS (YMM, YMM, YMM)",
+  "isa": [
+   "AVX"
+  ],
+  "linked_intrinsics": [
+   "_mm256_add_ps"
+  ],
+  "measurements": [
+   {
+    "citationUrl": "https://example.test/meas",
+    "family": "x86",
+    "latency": "4",
+    "latencyPairs": [],
+    "ports": "1*p01",
+    "source": "fixture-meas",
+    "sourceKind": "measured",
+    "sourceVersion": "1",
+    "tpLoop": "0.5",
+    "tpPorts": "1*p01",
+    "tpUnrolled": "-",
+    "uarch": "SKL",
+    "uops": "1"
+   },
+   {
+    "citationUrl": "https://example.test/meas",
+    "family": "x86",
+    "latency": "4",
+    "latencyPairs": [],
+    "ports": "1*ALU",
+    "source": "fixture-meas",
+    "sourceKind": "measured",
+    "sourceVersion": "1",
+    "tpLoop": "0.5",
+    "tpPorts": "1*ALU",
+    "tpUnrolled": "-",
+    "uarch": "ZEN4",
+    "uops": "1"
+   }
+  ],
+  "metadata": {
+   "url": "https://uops.info/html/x86/VADDPS_YMM_YMM_YMM.html"
+  },
+  "mnemonic": "VADDPS",
+  "operand_details": [
+   {
+    "idx": "1",
+    "name": "DEST",
+    "r": "1",
+    "type": "ymm",
+    "w": "1",
+    "width": "256",
+    "xtype": "f32"
+   },
+   {
+    "idx": "2",
+    "name": "SRC1",
+    "r": "1",
+    "type": "ymm",
+    "w": "0",
+    "width": "256",
+    "xtype": "f32"
+   }
+  ],
+  "pdf_refs": [],
+  "summary": "Add packed single-precision floating-point values."
+ }
+}

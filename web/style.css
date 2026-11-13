@@ -752,6 +752,67 @@ a:hover { text-decoration: underline; }
   white-space: pre;
 }
 
+/* Doc source groups: doc_sources blocks in stored order. */
+.doc-group { margin-bottom: 0.9rem; }
+.doc-group-head { font-size: 0.92rem; margin: 0 0 0.35rem; }
+.doc-family {
+  font-size: 0.68rem;
+  font-weight: 400;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0 0.35rem;
+  margin-left: 0.45rem;
+  vertical-align: middle;
+}
+.doc-sub { font-size: 0.86rem; margin: 0.5rem 0 0.25rem; }
+.doc-p, .doc-list, .doc-deflist, .doc-math, .doc-note, .doc-table { margin: 0.35rem 0; }
+.doc-p, .doc-list, .doc-deflist, .doc-math { font-size: 0.84rem; line-height: 1.6; }
+/* Math keeps its readable text in the mono face: same fallback as the
+   TUI, which has no 2D formulas. */
+.doc-math { font-family: var(--font-mono); }
+.doc-list { padding-left: 1.15rem; }
+.doc-note {
+  border-left: 3px solid var(--accent);
+  padding: 0.25rem 0.55rem;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+.doc-note-kind { font-weight: 600; }
+.doc-note-warning { border-left-color: #d97706; }
+.doc-note-seealso { border-left-color: #0d7377; }
+.doc-deflist dt { font-weight: 600; margin-top: 0.3rem; }
+.doc-deflist dd { margin: 0 0 0 1.15rem; }
+/* Inline runs, code captions and highlighted code inside doc blocks. */
+.doc-p code, .doc-list code, .doc-deflist code, .doc-note code {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  background: var(--code-bg);
+  border-radius: 3px;
+  padding: 0 0.1em;
+}
+.doc-link, .doc-fnlink { color: var(--accent); }
+.doc-fnlink {
+  font: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+}
+.doc-math-inline { font-family: var(--font-mono); font-size: 0.95em; }
+.doc-code-caption { font-size: 0.78rem; color: var(--text-muted); margin: 0.35rem 0 0.15rem; }
+.desc-code code, pre.sig code { font: inherit; background: none; padding: 0; }
+pre.desc-code code.hljs, pre.sig code.hljs { display: block; background: transparent; }
+.doc-list .doc-list { margin: 0.15rem 0; }
+.doc-table { border-collapse: collapse; }
+.doc-table th, .doc-table td {
+  border: 1px solid var(--border);
+  padding: 0.2rem 0.5rem;
+  text-align: left;
+  font-size: 0.82rem;
+}
+
 .results-panel.collapsed { display: none; }
 
 /* Responsive */
@@ -996,6 +1057,7 @@ button.perf-line { background: none; border: none; padding: 0; text-align: left;
 .detail-tabs button { background: none; border: none; border-bottom: 2px solid transparent; padding: .35rem .7rem;
   font: inherit; font-size: .82rem; cursor: pointer; color: var(--text-secondary); }
 .detail-tabs button[aria-pressed="true"] { color: var(--text); border-bottom-color: var(--accent); }
+.detail-tabs button[hidden] { display: none; }
 .detail-tabs button:disabled { opacity: .4; cursor: not-allowed; text-decoration: line-through; }
 .detail-tabs-wrap button.detail-all { margin-left: auto; border: 1px solid var(--border); border-radius: var(--radius); }
 .detail-hidden { display: none !important; }

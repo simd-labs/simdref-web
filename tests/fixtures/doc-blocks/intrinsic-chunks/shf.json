@@ -1,0 +1,650 @@
+{
+ "__shfl_sync": {
+  "architecture": "cuda",
+  "description": "Warp shuffle functions exchange a value between non-exited threads within a warp without the use of shared memory.",
+  "display_architecture": "CUDA",
+  "display_isa": "CUDA",
+  "display_isa_tokens": [
+   "CUDA"
+  ],
+  "doc_sections": {
+   "Description": "Each warp thread reads a 32-bit value from the lane given by srcLane.",
+   "Parameters": "unsigned mask, T value, int srcLane, int width=warpSize"
+  },
+  "doc_sources": [
+   {
+    "heading": "Warp Lane Mirroring Routines",
+    "page": "cuda-programming-guide/05-appendices/lane-extensions.html",
+    "sections": [
+     {
+      "blocks": [
+       {
+        "kind": "note",
+        "note": "hint",
+        "runs": [
+         [
+          "text",
+          "These routines exchange values between lanes of one "
+         ],
+         [
+          "code",
+          "warp"
+         ],
+         [
+          "text",
+          "."
+         ]
+        ],
+        "shared": true,
+        "text": "These routines exchange values between lanes of one warp."
+       },
+       {
+        "caption": "Synopsis",
+        "kind": "code",
+        "lang": "cuda",
+        "shared": true,
+        "text": "T __fxlane_pick_sync(unsigned mask, T value, int srcLane, int width=warpSize);\nT __fxlane_up_sync(unsigned mask, T value, int delta, int width=warpSize);\nT __fxlane_down_sync(unsigned mask, T value, int delta, int width=warpSize);\nT __fxlane_xor_sync(unsigned mask, T value, int laneMask, int width=warpSize);"
+       },
+       {
+        "kind": "paragraph",
+        "runs": [
+         [
+          "text",
+          "Each routine reads one "
+         ],
+         [
+          "code",
+          "32-bit value"
+         ],
+         [
+          "text",
+          " from another "
+         ],
+         [
+          "em",
+          "lane"
+         ],
+         [
+          "text",
+          " of the calling thread "
+         ],
+         [
+          "code",
+          "warp"
+         ],
+         [
+          "text",
+          ". See the "
+         ],
+         [
+          "link",
+          "warp rules",
+          "https://docs.example.test/guide/lane-extensions.html#warp-rules"
+         ],
+         [
+          "text",
+          " for the "
+         ],
+         [
+          "link",
+          "__fxlane_pick_sync()",
+          "__fxlane_pick_sync"
+         ],
+         [
+          "text",
+          "."
+         ]
+        ],
+        "shared": true,
+        "text": "Each routine reads one 32-bit value from another lane of the calling thread warp. See the warp rules for the full form."
+       },
+       {
+        "items": [
+         {
+          "runs": [
+           [
+            "text",
+            "Read the "
+           ],
+           [
+            "code",
+            "mask"
+           ],
+           [
+            "text",
+            "."
+           ]
+          ],
+          "text": "Read the mask."
+         },
+         {
+          "runs": [
+           [
+            "text",
+            "Pick the source lane with "
+           ],
+           [
+            "code",
+            "srcLane"
+           ],
+           [
+            "text",
+            "."
+           ]
+          ],
+          "text": "Pick the source lane with srcLane."
+         },
+         {
+          "runs": [
+           [
+            "text",
+            "Store the value at the "
+           ],
+           [
+            "em",
+            "caller lane"
+           ],
+           [
+            "text",
+            "."
+           ]
+          ],
+          "text": "Store the value at the caller lane."
+         }
+        ],
+        "kind": "list",
+        "ordered": true,
+        "shared": true
+       },
+       {
+        "items": [
+         {
+          "blocks": [
+           {
+            "items": [
+             "Width must be a power of two.",
+             "Width must divide the warp size."
+            ],
+            "kind": "list"
+           }
+          ],
+          "text": "Width clamps the source lane range."
+         },
+         "Mask selects the active lanes."
+        ],
+        "kind": "list",
+        "shared": true
+       },
+       {
+        "kind": "note",
+        "note": "warning",
+        "runs": [
+         [
+          "text",
+          "These routines do not imply a "
+         ],
+         [
+          "strong",
+          "memory barrier"
+         ],
+         [
+          "text",
+          "."
+         ]
+        ],
+        "shared": true,
+        "text": "These routines do not imply a memory barrier."
+       }
+      ],
+      "heading": "",
+      "shared": true
+     },
+     {
+      "blocks": [
+       {
+        "kind": "paragraph",
+        "owner": "__fxlane_pick_sync",
+        "runs": [
+         [
+          "text",
+          "Lane text one. The routine returns the value held at lane "
+         ],
+         [
+          "code",
+          "srcLane"
+         ],
+         [
+          "text",
+          "."
+         ]
+        ],
+        "text": "Lane text one. The routine returns the value held at lane srcLane."
+       },
+       {
+        "items": [
+         "Width clamps the source lane range.",
+         {
+          "runs": [
+           [
+            "text",
+            "Mask selects the active "
+           ],
+           [
+            "code",
+            "lanes"
+           ],
+           [
+            "text",
+            "."
+           ]
+          ],
+          "text": "Mask selects the active lanes."
+         }
+        ],
+        "kind": "list",
+        "owner": "__fxlane_pick_sync"
+       },
+       {
+        "caption": "Example: pick from a lane",
+        "kind": "code",
+        "lang": "c++",
+        "owner": "__fxlane_pick_sync",
+        "text": "__global__ void lane_demo(int *out) {\n  int v = threadIdx.x;\n  out[threadIdx.x] = __fxlane_pick_sync(0xffffffff, v, 0);\n}"
+       },
+       {
+        "caption": "Build",
+        "kind": "code",
+        "lang": "bash",
+        "owner": "__fxlane_pick_sync",
+        "text": "nvcc -arch=sm_70 lane_demo.cu -o lane_demo"
+       }
+      ],
+      "heading": "__fxlane_pick_sync",
+      "shared": false
+     }
+    ],
+    "shared": true,
+    "signature": "T __fxlane_pick_sync(unsigned mask, T value, int srcLane, int width=warpSize);",
+    "signature_runs": [
+     [
+      "text",
+      "T "
+     ],
+     [
+      "code",
+      "__fxlane_pick_sync"
+     ],
+     [
+      "text",
+      "(unsigned mask, T value, int srcLane, int width=warpSize);"
+     ]
+    ],
+    "source": "cuda-guide",
+    "title": "Example Guide",
+    "url": "https://docs.example.test/guide/lane-extensions.html#warp-lane-mirroring-routines"
+   },
+   {
+    "heading": "flane.sync.b32",
+    "sections": [
+     {
+      "blocks": [
+       {
+        "caption": "Form",
+        "kind": "code",
+        "lang": "ptx",
+        "text": "flane.sync.mode.b32  d[|p], a, b, c, membermask;"
+       }
+      ],
+      "heading": "Syntax"
+     },
+     {
+      "blocks": [
+       {
+        "kind": "paragraph",
+        "runs": [
+         [
+          "text",
+          "Copies a "
+         ],
+         [
+          "code",
+          "32-bit value"
+         ],
+         [
+          "text",
+          " between the lanes named by the "
+         ],
+         [
+          "em",
+          "mode modifier"
+         ],
+         [
+          "text",
+          ". See the "
+         ],
+         [
+          "link",
+          "mode table",
+          "https://docs.example.test/ptx/lane-mirror.html#modes"
+         ],
+         [
+          "text",
+          "."
+         ]
+        ],
+        "text": "Copies a 32-bit value between the lanes named by the mode modifier. See the mode table."
+       },
+       {
+        "items": [
+         {
+          "name": ".all",
+          "text": "All lanes take part."
+         },
+         {
+          "name": ".up",
+          "text": "Copies from a lane with a higher id."
+         },
+         {
+          "name": ".down",
+          "text": "Copies from a lane with a lower id."
+         },
+         {
+          "name": ".bfly",
+          "runs": [
+           [
+            "text",
+            "Copies in a "
+           ],
+           [
+            "em",
+            "butterfly"
+           ],
+           [
+            "text",
+            " pattern."
+           ]
+          ],
+          "text": "Copies in a butterfly pattern."
+         }
+        ],
+        "kind": "deflist"
+       }
+      ],
+      "heading": "Description"
+     },
+     {
+      "blocks": [
+       {
+        "kind": "code",
+        "lang": "text",
+        "text": "d = lane_value; p = (lane_value != 0);"
+       },
+       {
+        "kind": "math",
+        "tex": "d = a[b]",
+        "text": "d = a[b]"
+       }
+      ],
+      "heading": "Semantics"
+     },
+     {
+      "blocks": [
+       {
+        "kind": "paragraph",
+        "text": "Introduced in PTX ISA 7.0."
+       }
+      ],
+      "heading": "PTX ISA Notes"
+     },
+     {
+      "blocks": [
+       {
+        "kind": "paragraph",
+        "text": "Requires sm_70 or higher."
+       }
+      ],
+      "heading": "Target ISA Notes"
+     },
+     {
+      "blocks": [
+       {
+        "caption": "Example",
+        "kind": "code",
+        "lang": "ptx",
+        "text": "// pick from a lane\nloop:\n.reg .b32 %r1;\n@!p flane.sync.b32 %r1, %r2, %r3, 0xffffffff;"
+       }
+      ],
+      "heading": "Examples"
+     }
+    ],
+    "shared": false,
+    "source": "ptx-isa",
+    "title": "Example ISA",
+    "url": "https://docs.example.test/ptx/lane-mirror.html#flane-sync-b32"
+   }
+  ],
+  "header": "__clang_cuda_intrinsics.h",
+  "instruction_refs": [
+   {
+    "architecture": "ptx",
+    "display_key": "shfl.sync.b32 d[|p], a, b, c, membermask",
+    "form": "",
+    "key": "ptx:shfl.sync.b32 d[|p], a, b, c, membermask",
+    "match_count": "1",
+    "name": "shfl.sync.idx.b32",
+    "resolution": "ptx-spelling",
+    "xed": ""
+   }
+  ],
+  "instructions": [
+   "shfl.sync.b32 d[|p], a, b, c, membermask"
+  ],
+  "isa": [
+   "CUDA"
+  ],
+  "metadata": {
+   "doc_source": "cuda-guide"
+  },
+  "name": "__shfl_sync",
+  "notes": [],
+  "signature": "T __shfl_sync (unsigned mask, T value, int srcLane, int width=warpSize);",
+  "url": "https://docs.nvidia.com/cuda/cuda-programming-guide/05-appendices/cpp-language-extensions.html#warp-shuffle-functions"
+ },
+ "__shfl_up_sync": {
+  "architecture": "cuda",
+  "description": "The value held by the thread at the resulting lane ID is returned.",
+  "display_architecture": "CUDA",
+  "display_isa": "CUDA",
+  "display_isa_tokens": [
+   "CUDA"
+  ],
+  "doc_sections": {
+   "Description": "The source lane index does not wrap around the value of width."
+  },
+  "doc_sources": [
+   {
+    "heading": "Lane Speed Intrinsics",
+    "sections": [
+     {
+      "blocks": [
+       {
+        "kind": "paragraph",
+        "runs": [
+         [
+          "text",
+          "Calculates the fast lane-relative mirroring of the input value. The map is "
+         ],
+         [
+          "math",
+          "y = x * (1 - 2 * (srcLane & 1))",
+          "y = x\\,(1 - 2\\,(s \\& 1))"
+         ],
+         [
+          "text",
+          "."
+         ]
+        ],
+        "text": "Calculates the fast lane-relative mirroring of the input value. The map is y = x * (1 - 2 * (srcLane & 1))."
+       },
+       {
+        "kind": "note",
+        "note": "seealso",
+        "runs": [
+         [
+          "link",
+          "fxlane_cosf()",
+          "https://docs.example.test/math/lane-math.html#group__lane_1gafa0ea556677"
+         ]
+        ],
+        "text": "fxlane_cosf()"
+       },
+       {
+        "kind": "note",
+        "note": "note",
+        "runs": [
+         [
+          "text",
+          "For accuracy information, see the "
+         ],
+         [
+          "em",
+          "lane accuracy tables"
+         ],
+         [
+          "text",
+          "."
+         ]
+        ],
+        "text": "For accuracy information, see the lane accuracy tables."
+       },
+       {
+        "items": [
+         {
+          "name": "Parameters",
+          "runs": [
+           [
+            "text",
+            "unsigned "
+           ],
+           [
+            "code",
+            "mask"
+           ],
+           [
+            "text",
+            ", T "
+           ],
+           [
+            "code",
+            "value"
+           ],
+           [
+            "text",
+            ", int "
+           ],
+           [
+            "code",
+            "srcLane"
+           ],
+           [
+            "text",
+            ", int "
+           ],
+           [
+            "code",
+            "width"
+           ]
+          ],
+          "text": "unsigned mask, T value, int srcLane, int width"
+         },
+         {
+          "name": "Returns",
+          "runs": [
+           [
+            "text",
+            "The "
+           ],
+           [
+            "em",
+            "approximate"
+           ],
+           [
+            "text",
+            " lane-relative mirror of the input value."
+           ]
+          ],
+          "text": "The approximate lane-relative mirror of the input value."
+         }
+        ],
+        "kind": "deflist"
+       },
+       {
+        "kind": "math",
+        "tex": "y = x\\,(1 - 2\\,(s \\& 1))",
+        "text": "y = x * (1 - 2 * (srcLane & 1))"
+       },
+       {
+        "caption": "Parameters",
+        "header": [
+         "Parameter",
+         "Description"
+        ],
+        "kind": "table",
+        "rows": [
+         [
+          "mask",
+          "Selects the lanes that take part."
+         ],
+         [
+          "srcLane",
+          "Gives the source lane id."
+         ]
+        ]
+       }
+      ],
+      "heading": ""
+     }
+    ],
+    "shared": false,
+    "source": "cuda-math-api",
+    "url": "https://docs.example.test/math/lane-math.html#group__lane_1gafa0ea112233"
+   }
+  ],
+  "header": "__clang_cuda_intrinsics.h",
+  "instruction_refs": [],
+  "instructions": [],
+  "isa": [
+   "CUDA"
+  ],
+  "metadata": {
+   "doc_source": "cuda-math-api",
+   "result": "the mirrored lane value"
+  },
+  "name": "__shfl_up_sync",
+  "notes": [],
+  "signature": "T __shfl_up_sync (unsigned mask, T value, unsigned int delta, int width=warpSize);",
+  "url": "https://docs.nvidia.com/cuda/cuda-programming-guide/05-appendices/cpp-language-extensions.html#warp-shuffle-functions"
+ },
+ "__shfl_xor_sync": {
+  "architecture": "cuda",
+  "description": "The source lane index is the caller's lane ID XOR laneMask.",
+  "display_architecture": "CUDA",
+  "display_isa": "CUDA",
+  "display_isa_tokens": [
+   "CUDA"
+  ],
+  "doc_sections": {
+   "Description": "This mode implements a butterfly addressing pattern."
+  },
+  "header": "__clang_cuda_intrinsics.h",
+  "instruction_refs": [],
+  "instructions": [],
+  "isa": [
+   "CUDA"
+  ],
+  "metadata": {},
+  "name": "__shfl_xor_sync",
+  "notes": [],
+  "signature": "T __shfl_xor_sync (unsigned mask, T value, int laneMask, int width=warpSize);"
+ }
+}
